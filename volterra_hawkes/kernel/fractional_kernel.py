@@ -17,7 +17,7 @@ class FractionalKernel(Kernel):
     def __fractional_kernel(self, t, alpha: float):
         return self.c * t**(alpha - 1) / gamma(alpha)
 
-    def kernel(self, t):
+    def __call__(self, t):
         return self.__fractional_kernel(t, alpha=self.H + 0.5)
 
     def integrated_kernel(self, t):

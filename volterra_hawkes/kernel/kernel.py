@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 class Kernel(ABC):
     @abstractmethod
-    def kernel(self, t):
+    def __call__(self, t):
         pass
 
     @abstractmethod

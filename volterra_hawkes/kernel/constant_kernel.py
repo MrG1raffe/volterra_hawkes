@@ -11,7 +11,7 @@ class ConstantKernel(Kernel):
     """
     c: float = 1
 
-    def kernel(self, t):
+    def __call__(self, t):
         return self.c * np.ones_like(t)
 
     def integrated_kernel(self, t):
