@@ -13,7 +13,7 @@ class IVIHawkesProcess:
     rng: np.random.Generator
     g0: Callable = None
 
-    def simulate(self, t_grid, n_paths):
+    def simulate_on_grid(self, t_grid, n_paths):
         """
 
 
@@ -25,14 +25,37 @@ class IVIHawkesProcess:
         U, Z, lam = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths)
         N = Z + U
 
-        # Calculating instantaneous intensity from N
-        # K_mat = K.kernel(t_grid[:, None] - t_grid[None, :])
-        # K_mat = np.tril(K_mat, k=-1)
-        # lam_from_N = g0_const(t_grid).reshape((-1, 1)) + K_mat[:, :-1] @ dN
-
         # Calculating integrated intensity from N
         K_bar_mat = self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
                     self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[1:].reshape(1, -1))
         K_bar_mat = np.tril(K_bar_mat, k=-1)
         U_from_N = ivi.g0_bar(t_grid).reshape((-1, 1)) + (K_bar_mat @ N[:-1])
         return N, U_from_N, lam
+
+    def simulate_jump_moments(self, t_grid, n_paths):
+        ivi = IVIVolterra(is_continuous=False, kernel=self.kernel, g0_bar=self.g0_bar, rng=self.rng, b=1, c=1, g0=self.g0)
+        U, Z, lam = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths)
+        N = Z + U
+        dN = np.round(np.diff(N, axis=0)).astype(int)
+
+        t_jumps = []
+        for i in range(n_paths):
+            uniforms = self.rng.random(size=np.round(N[-1, i]).astype(int))
+            jumps = np.repeat(t_grid[:-1], repeats=dN[:, i]) + uniforms * np.repeat(np.diff(t_grid), repeats=dN[:, i])
+            t_jumps.append(np.sort(jumps))
+
+        return t_jumps
+
+    def lam_from_jumps(self, t, t_jumps):
+        return self.g0(t) + np.sum(np.where(t.reshape((-1, 1)) > t_jumps.reshape((1, -1)),
+                                            self.kernel(t.reshape((-1, 1)) - t_jumps.reshape((1, -1))),
+                                            0), axis=1)
+
+    def U_from_jumps(self, t, t_jumps):
+        return self.g0_bar(t) + np.sum(np.where(t.reshape((-1, 1)) > t_jumps.reshape((1, -1)),
+                                                self.kernel.integrated_kernel(t.reshape((-1, 1)) - t_jumps.reshape((1, -1))),
+                                                0), axis=1)
+
+    @staticmethod
+    def N_from_jumps(t, t_jumps):
+        return np.sum(t.reshape((-1, 1)) >= t_jumps.reshape((1, -1)), axis=1)

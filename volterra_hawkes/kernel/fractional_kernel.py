@@ -15,7 +15,10 @@ class FractionalKernel(Kernel):
     H: float = 0.1
 
     def __fractional_kernel(self, t, alpha: float):
-        return self.c * t**(alpha - 1) / gamma(alpha)
+        valid_mask = t > 0  # Avoid issues with negative values
+        result = np.zeros_like(t, dtype=np.float64)
+        result[valid_mask] = self.c * t[valid_mask]**(alpha - 1) / gamma(alpha)
+        return result
 
     def __call__(self, t):
         return self.__fractional_kernel(t, alpha=self.H + 0.5)
@@ -28,4 +31,7 @@ class FractionalKernel(Kernel):
 
     def resolvent(self, t):
         alpha = self.H + 0.5
-        return self.c * t**(alpha - 1) * mittag_leffler(t=self.c * t**alpha, alpha=alpha, beta=alpha)
+        valid_mask = t > 0  # Avoid issues with negative values
+        result = np.zeros_like(t, dtype=np.float64)
+        result[valid_mask] = self.c * t[valid_mask]**(alpha - 1) * mittag_leffler(t=self.c * t[valid_mask]**alpha, alpha=alpha, beta=alpha)
+        return result
