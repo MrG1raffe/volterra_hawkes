@@ -15,6 +15,7 @@ class FractionalKernel(Kernel):
     H: float = 0.1
 
     def __fractional_kernel(self, t, alpha: float):
+        t = np.array(t)
         valid_mask = t > 0  # Avoid issues with negative values
         result = np.zeros_like(t, dtype=np.float64)
         result[valid_mask] = self.c * t[valid_mask]**(alpha - 1) / gamma(alpha)
