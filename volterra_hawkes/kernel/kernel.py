@@ -25,3 +25,15 @@ class Kernel(ABC):
     #@abstractmethod
     def double_integrated_resolvent(self, t):
         pass
+
+    #@abstractmethod
+    def inv_kernel(self, x):
+        pass
+
+    #@abstractmethod
+    def inv_integrated_kernel(self, x):
+        pass
+
+    #@abstractmethod
+    def inv_double_integrated_kernel(self, x):
+        pass

@@ -21,6 +21,9 @@ class FractionalKernel(Kernel):
         result[valid_mask] = self.c * t[valid_mask]**(alpha - 1) / gamma(alpha)
         return result
 
+    def __inv_fractional_kernel(self, x, alpha: float):
+        return (x / self.c * gamma(alpha)) ** (1 / (alpha - 1))
+
     def __call__(self, t):
         return self.__fractional_kernel(t, alpha=self.H + 0.5)
 
@@ -36,3 +39,12 @@ class FractionalKernel(Kernel):
         result = np.zeros_like(t, dtype=np.float64)
         result[valid_mask] = self.c * t[valid_mask]**(alpha - 1) * mittag_leffler(t=self.c * t[valid_mask]**alpha, alpha=alpha, beta=alpha)
         return result
+
+    def inv_kernel(self, x):
+        return self.__inv_fractional_kernel(x, alpha=self.H + 0.5)
+
+    def inv_integrated_kernel(self, x):
+        return self.__inv_fractional_kernel(x, alpha=self.H + 1.5)
+
+    def inv_double_integrated_kernel(self, x):
+        return self.__inv_fractional_kernel(x, alpha=self.H + 2.5)

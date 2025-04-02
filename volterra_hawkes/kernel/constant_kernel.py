@@ -22,3 +22,6 @@ class ConstantKernel(Kernel):
 
     def resolvent(self, t):
         return self.c * np.exp(self.c * t)
+
+    def inv_integrated_kernel(self, x):
+        return x / self.c
