@@ -45,7 +45,7 @@ def simulate_hawkes_ogata(
     mu: float,
     kernel: Union[Callable, Kernel],
     rng: np.random.Generator = None,
-    eps: float = 1e-9,
+    eps: float = 1e-11,
     batch_size: int = 100
 ):
     if rng is None:
@@ -58,10 +58,10 @@ def simulate_hawkes_ogata(
     uniform_batch = rng.uniform(size=(batch_size, 2))
     arrivals = np.empty(batch_size)
 
-    while ptr < T:
+    while ptr <= T:
         M = mu + kernel(ptr - arrivals[:event_counter] + eps).sum()
         arrival_cand = ptr - np.log(uniform_batch[batch_iter, 0]) / M
-        if uniform_batch[batch_iter, 1] < (mu + kernel(arrival_cand - arrivals[:event_counter]).sum()) / M:
+        if uniform_batch[batch_iter, 1] < (mu + kernel(arrival_cand - arrivals[:event_counter]).sum()) / M :
             arrivals[event_counter] = arrival_cand
             event_counter += 1
             if event_counter == arrivals.size:
@@ -75,4 +75,4 @@ def simulate_hawkes_ogata(
             batch_iter = 0
 
     #  print("Number of jumps: ", len(arrivals), "Number of iterations: ", number_of_iter, "Acceptance rate: ", len(arrivals) / number_of_iter)
-    return arrivals[:event_counter]
+    return arrivals[:event_counter - 1]

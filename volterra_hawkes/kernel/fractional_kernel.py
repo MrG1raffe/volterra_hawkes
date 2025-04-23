@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from scipy.special import gamma
 
 from .kernel import Kernel
+from .mittag_leffler_kernel import MittagLefflerKernel
 from ..utility.mittag_leffler import mittag_leffler
 
 
@@ -48,3 +49,6 @@ class FractionalKernel(Kernel):
 
     def inv_double_integrated_kernel(self, x):
         return self.__inv_fractional_kernel(x, alpha=self.H + 2.5)
+    
+    def resolvent_as_kernel(self):
+        return MittagLefflerKernel(c=self.c, H=self.H)

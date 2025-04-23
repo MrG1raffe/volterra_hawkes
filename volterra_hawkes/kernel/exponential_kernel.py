@@ -38,6 +38,9 @@ class ExponentialKernel(Kernel):
             return 0.5 * self.c * t**2
         else:
             return (self.c / k) * (t - (1 - np.exp(-k * t)) / k)
+        
+    def resolvent_as_kernel(self):
+        return ExponentialKernel(c=self.c, lam=self.lam-self.c)
 
     def inv_kernel(self, x):
         return -np.log(x / self.c) / self.lam

@@ -18,6 +18,9 @@ class Kernel(ABC):
     def resolvent(self, t):
         pass
 
+    def resolvent_as_kernel(self):
+        pass
+    
     #@abstractmethod
     def integrated_resolvent(self, t):
         pass

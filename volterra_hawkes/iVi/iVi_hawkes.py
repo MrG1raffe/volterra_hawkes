@@ -12,6 +12,9 @@ class IVIHawkesProcess:
     g0_bar: Callable
     rng: np.random.Generator
     g0: Callable = None
+    trapeze: bool = False
+    resolvent_IG: bool = False
+    resolvent_alpha: bool = False
 
     def simulate_on_grid(self, t_grid, n_paths):
         """
@@ -21,7 +24,10 @@ class IVIHawkesProcess:
         :param n_paths:
         :return: N, U, lambda as arrays of shape (len(t_grid), n_paths).
         """
-        ivi = IVIVolterra(is_continuous=False, kernel=self.kernel, g0_bar=self.g0_bar, rng=self.rng, b=1, c=1, g0=self.g0)
+
+        ivi = IVIVolterra(is_continuous=False, trapeze=self.trapeze, resolvent_IG=self.resolvent_IG,
+                          resolvent_alpha=self.resolvent_alpha, kernel=self.kernel,
+                          g0_bar=self.g0_bar, rng=self.rng, b=1, c=1, g0=self.g0)
         U, Z, lam = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths)
         N = Z + U
 
@@ -30,10 +36,10 @@ class IVIHawkesProcess:
                     self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[1:].reshape(1, -1))
         K_bar_mat = np.tril(K_bar_mat, k=-1)
         U_from_N = ivi.g0_bar(t_grid).reshape((-1, 1)) + (K_bar_mat @ N[:-1])
-        return N, U_from_N, lam
+        return N, U, lam
 
     def simulate_arrivals(self, t_grid, n_paths):
-        ivi = IVIVolterra(is_continuous=False, kernel=self.kernel, g0_bar=self.g0_bar, rng=self.rng, b=1, c=1, g0=self.g0)
+        ivi = IVIVolterra(is_continuous=False, trapeze=self.trapeze, kernel=self.kernel, g0_bar=self.g0_bar, rng=self.rng, b=1, c=1, g0=self.g0)
         U, Z, lam = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths)
         N = Z + U
         dN = np.round(np.diff(N, axis=0)).astype(int)
