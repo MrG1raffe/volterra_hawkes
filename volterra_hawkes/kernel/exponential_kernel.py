@@ -16,34 +16,26 @@ class ExponentialKernel(Kernel):
         return self.c * np.exp(-self.lam * t)
 
     def integrated_kernel(self, t):
-        return (self.c / self.lam) * (1 - np.exp(-self.lam * t))
-
-    def double_integrated_kernel(self, t):
-        return (self.c / self.lam) * (t - (1 - np.exp(-self.lam * t)) / self.lam)
-
-    def resolvent(self, t):
-        k = self.lam - self.c
-        return self.c * np.exp(-k * t)
-
-    def integrated_resolvent(self, t):
-        k = self.lam - self.c
-        if np.isclose(k, 0):
+        if np.isclose(self.lam, 0):
             return self.c * t
         else:
-            return (self.c / k) * (1 - np.exp(-k * t))
+            return (self.c / self.lam) * (1 - np.exp(-self.lam * t))
 
-    def double_integrated_resolvent(self, t):
-        k = self.lam - self.c
-        if np.isclose(k, 0):
+    def double_integrated_kernel(self, t):
+        if np.isclose(self.lam, 0):
             return 0.5 * self.c * t**2
         else:
-            return (self.c / k) * (t - (1 - np.exp(-k * t)) / k)
-        
-    def resolvent_as_kernel(self):
-        return ExponentialKernel(c=self.c, lam=self.lam-self.c)
+            return (self.c / self.lam) * (t - (1 - np.exp(-self.lam * t)) / self.lam)
+
+    @property
+    def resolvent(self) -> Kernel:
+        return ExponentialKernel(c=self.c, lam=self.lam - self.c)
 
     def inv_kernel(self, x):
         return -np.log(x / self.c) / self.lam
 
     def inv_integrated_kernel(self, x):
         return -np.log(1 - self.lam * x / self.c) / self.lam
+
+    def inv_double_integrated_kernel(self, x):
+        raise NotImplementedError

@@ -34,12 +34,12 @@ class FractionalKernel(Kernel):
     def double_integrated_kernel(self, t):
         return self.__fractional_kernel(t, alpha=self.H + 2.5)
 
-    def resolvent(self, t):
-        alpha = self.H + 0.5
-        valid_mask = t > 0  # Avoid issues with negative values
-        result = np.zeros_like(t, dtype=np.float64)
-        result[valid_mask] = self.c * t[valid_mask]**(alpha - 1) * mittag_leffler(t=self.c * t[valid_mask]**alpha, alpha=alpha, beta=alpha)
-        return result
+    # def resolvent(self, t):
+    #     alpha = self.H + 0.5
+    #     valid_mask = t > 0  # Avoid issues with negative values
+    #     result = np.zeros_like(t, dtype=np.float64)
+    #     result[valid_mask] = self.c * t[valid_mask]**(alpha - 1) * mittag_leffler(t=self.c * t[valid_mask]**alpha, alpha=alpha, beta=alpha)
+    #     return result
 
     def inv_kernel(self, x):
         return self.__inv_fractional_kernel(x, alpha=self.H + 0.5)
@@ -49,6 +49,7 @@ class FractionalKernel(Kernel):
 
     def inv_double_integrated_kernel(self, x):
         return self.__inv_fractional_kernel(x, alpha=self.H + 2.5)
-    
-    def resolvent_as_kernel(self):
-        return MittagLefflerKernel(c=self.c, H=self.H)
+
+    @property
+    def resolvent(self) -> Kernel:
+        return MittagLefflerKernel(c=self.c, alpha=self.H + 0.5)

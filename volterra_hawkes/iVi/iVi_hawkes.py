@@ -39,7 +39,9 @@ class IVIHawkesProcess:
         return N, U, lam
 
     def simulate_arrivals(self, t_grid, n_paths):
-        ivi = IVIVolterra(is_continuous=False, trapeze=self.trapeze, kernel=self.kernel, g0_bar=self.g0_bar, rng=self.rng, b=1, c=1, g0=self.g0)
+        ivi = IVIVolterra(is_continuous=False, trapeze=self.trapeze, kernel=self.kernel, g0_bar=self.g0_bar,
+                          rng=self.rng, b=1, c=1, g0=self.g0,
+                          resolvent_IG=self.resolvent_IG, resolvent_alpha=self.resolvent_alpha)
         U, Z, lam = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths)
         N = Z + U
         dN = np.round(np.diff(N, axis=0)).astype(int)

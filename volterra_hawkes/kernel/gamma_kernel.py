@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from scipy.special import gamma, gammainc, gammaincinv
 
 from .kernel import Kernel
-from ..utility.mittag_leffler import mittag_leffler
+from .exp_mittag_leffler_kernel import ExpMittagLefflerKernel
 
 
 @dataclass
@@ -32,12 +32,15 @@ class GammaKernel(Kernel):
         return self.c / (self.lam**(self.alpha + 1)) * (self.lam * t * gammainc(self.alpha, self.lam * t) -
                                                         gammainc(self.alpha + 1, self.lam * t) * self.alpha)
 
-    def resolvent(self, t):
-        valid_mask = t > 0  # Avoid issues with negative values
-        result = np.zeros_like(t, dtype=np.float64)
-        result[valid_mask] = self.c * np.exp(-self.lam * t[valid_mask]) * t[valid_mask]**(self.alpha - 1) * \
-                             mittag_leffler(t=self.c * t[valid_mask]**self.alpha, alpha=self.alpha, beta=self.alpha)
-        return result
+    @property
+    def resolvent(self) -> Kernel:
+        return ExpMittagLefflerKernel(c=self.c, lam=self.lam, alpha=self.alpha)
+
+    def inv_kernel(self, x):
+        raise NotImplementedError
 
     def inv_integrated_kernel(self, x):
         return gammaincinv(self.alpha, x * (self.lam**self.alpha) / self.c) / self.lam
+
+    def inv_double_integrated_kernel(self, x):
+        raise NotImplementedError

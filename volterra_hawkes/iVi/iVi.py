@@ -22,8 +22,7 @@ class IVIVolterra:
         n_steps = len(t_grid) - 1
         dt = t_grid[-1] / n_steps
 
-
-        res = self.kernel.resolvent_as_kernel()
+        res = self.kernel.resolvent
 
         # Pre-compute certain quantities independent of i and m
         if self.resolvent_IG:
@@ -53,11 +52,12 @@ class IVIVolterra:
         for i in range(n_steps):
             alpha_i = g0_bar_diff[i] + self.c * int_matrix[i, :] @ dZ + b_alpha * int_matrix[i, :] @ dU
             if self.trapeze:
-                mu = alpha_i * int / (2 * double_int * (1 - b_IG * double_int))
-                lambda_ = (alpha_i)**2 * int / (4 * (double_int)**3)
-                dU_i = self.rng.wald(mean=mu, scale=lambda_, size=n_paths)
-                dU_i += alpha_i * (1 - int / (2 * double_int))
-                dU_i = np.maximum(0, dU_i)
+                raise NotImplementedError
+                # mu = alpha_i * int / (2 * double_int * (1 - b_IG * double_int))
+                # lambda_ = (alpha_i)**2 * int / (4 * (double_int)**3)
+                # dU_i = self.rng.wald(mean=mu, scale=lambda_, size=n_paths)
+                # dU_i += alpha_i * (1 - int / (2 * double_int))
+                # dU_i = np.maximum(0, dU_i)
             else:
                 if self.resolvent_IG and not self.resolvent_alpha:
                     alpha_i = alpha_i * (1 + double_int)

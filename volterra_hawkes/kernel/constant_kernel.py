@@ -21,11 +21,15 @@ class ConstantKernel(Kernel):
     def double_integrated_kernel(self, t):
         return 0.5 * self.c * t**2
 
-    def resolvent(self, t):
-        return self.c * np.exp(self.c * t)
-    
-    def resolvent_as_kernel(self):
+    @property
+    def resolvent(self) -> Kernel:
         return ExponentialKernel(c=self.c, lam=-self.c)
 
     def inv_integrated_kernel(self, x):
         return x / self.c
+
+    def inv_kernel(self, x):
+        raise NotImplementedError
+
+    def inv_double_integrated_kernel(self, x):
+        raise NotImplementedError
