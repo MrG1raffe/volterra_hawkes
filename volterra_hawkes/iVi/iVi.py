@@ -60,16 +60,17 @@ class IVIVolterra:
                 # dU_i = np.maximum(0, dU_i)
             else:
                 if self.resolvent_IG and not self.resolvent_alpha:
-                    alpha_i = alpha_i * (1 + double_int)
+                    alpha_i = alpha_i * (1 + int)
                     mu = alpha_i
                     lambda_ = (alpha_i / int)**2    
                     #mu = (1 + int) * alpha_i / (1 + int * (1 - self.b))
                     #lambda_ = ((1 + int) * alpha_i / (self.c * int))**2
                 else:
+                    alpha_i = np.maximum(alpha_i, 0)
                     mu = alpha_i / (1 - b_alpha * int)
                     lambda_ = (alpha_i / (self.c * int))**2
-                    if self.resolvent_alpha:
-                        print(np.min(alpha_i))
+                    #if self.resolvent_alpha:
+                        # print(np.min(alpha_i))
             dU_i = self.rng.wald(mean=mu, scale=lambda_, size=n_paths)
 
             #dU_i = self.rng.wald(mean=mu, scale=lambda_, size=n_paths) # inverse_gaussian_sample_vectorized(mu, lambda_, n_paths, self.rng)
