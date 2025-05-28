@@ -76,3 +76,19 @@ def simulate_hawkes_ogata(
 
     #  print("Number of jumps: ", len(arrivals), "Number of iterations: ", number_of_iter, "Acceptance rate: ", len(arrivals) / number_of_iter)
     return arrivals[:event_counter - 1]
+
+
+def lam_from_jumps(t, t_jumps, kernel: Kernel, g0: Callable):
+    return g0(t) + np.sum(np.where(t.reshape((-1, 1)) > t_jumps.reshape((1, -1)),
+                                   kernel(t.reshape((-1, 1)) - t_jumps.reshape((1, -1))),
+                                   0), axis=1)
+
+
+def U_from_jumps(t, t_jumps, kernel: Kernel, g0_bar: Callable):
+    return g0_bar(t) + np.sum(np.where(t.reshape((-1, 1)) > t_jumps.reshape((1, -1)),
+                                       kernel.integrated_kernel(t.reshape((-1, 1)) - t_jumps.reshape((1, -1))),
+                                       0), axis=1)
+
+
+def N_from_jumps(t, t_jumps):
+    return np.sum(t.reshape((-1, 1)) >= t_jumps.reshape((1, -1)), axis=1)
