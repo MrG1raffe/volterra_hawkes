@@ -5,6 +5,7 @@ from typing import Callable, Union
 
 from .poisson import inhomogeneous_poisson_field_on_interval_thinning, inhomogeneous_poisson_field_on_interval_inversion
 from ..kernel.kernel import Kernel
+from ..utility.sim_counter import SimCounter
 
 
 def simulate_hawkes(
@@ -12,13 +13,15 @@ def simulate_hawkes(
     g0: Callable,
     g0_upper_bound: float,
     kernel: Kernel,
-    rng: np.random.Generator = None
+    rng: np.random.Generator = None,
+    sim_counter: SimCounter = None
 ) -> NDArray[float64]:
     if rng is None:
         rng = np.random.default_rng(seed=42)
     # simulate the jumps of an inhomogeneous Poisson with intensity g_0(t) via thinning
     hawkes_arrivals = inhomogeneous_poisson_field_on_interval_thinning(a=0, b=T, intensity=g0,
-                                                                       intensity_bound=g0_upper_bound, rng=rng)
+                                                                                   intensity_bound=g0_upper_bound,
+                                                                                   rng=rng, sim_counter=sim_counter)
 
     ptr = 0
     to_concatenate = []
@@ -28,7 +31,7 @@ def simulate_hawkes(
         descendant_arrivals = parent_arrival + inhomogeneous_poisson_field_on_interval_inversion(a=0, b=T - parent_arrival,
                                                                                                  integrated_intensity=kernel.integrated_kernel,
                                                                                                  inv_integrated_intensity=kernel.inv_integrated_kernel,
-                                                                                                 rng=rng)
+                                                                                                 rng=rng, sim_counter=sim_counter)
         # print("Parent:", parent_arrival, "Number of descendents:", len(descendent_arrials), "Descendents:", descendent_arrials)
         to_concatenate.append(descendant_arrivals)
         if ptr == len(hawkes_arrivals) - 1 and to_concatenate:
@@ -46,7 +49,8 @@ def simulate_hawkes_ogata(
     kernel: Union[Callable, Kernel],
     rng: np.random.Generator = None,
     eps: float = 1e-11,
-    batch_size: int = 100
+    batch_size: int = 10,
+    sim_counter: SimCounter = None
 ):
     if rng is None:
         rng = np.random.default_rng(seed=42)
@@ -56,12 +60,14 @@ def simulate_hawkes_ogata(
     event_counter = 0
 
     uniform_batch = rng.uniform(size=(batch_size, 2))
+    if sim_counter is not None:
+        sim_counter.add(uniform_batch.size)
     arrivals = np.empty(batch_size)
 
     while ptr <= T:
         M = mu + kernel(ptr - arrivals[:event_counter] + eps).sum()
         arrival_cand = ptr - np.log(uniform_batch[batch_iter, 0]) / M
-        if uniform_batch[batch_iter, 1] < (mu + kernel(arrival_cand - arrivals[:event_counter]).sum()) / M :
+        if uniform_batch[batch_iter, 1] < (mu + kernel(arrival_cand - arrivals[:event_counter]).sum()) / M:
             arrivals[event_counter] = arrival_cand
             event_counter += 1
             if event_counter == arrivals.size:
@@ -72,6 +78,8 @@ def simulate_hawkes_ogata(
         batch_iter += 1
         if batch_iter == batch_size:
             uniform_batch = rng.uniform(size=(batch_size, 2))
+            if sim_counter is not None:
+                sim_counter.add(uniform_batch.size)
             batch_iter = 0
 
     #  print("Number of jumps: ", len(arrivals), "Number of iterations: ", number_of_iter, "Acceptance rate: ", len(arrivals) / number_of_iter)

@@ -4,6 +4,7 @@ from typing import Callable
 
 from .iVi import IVIVolterra
 from ..kernel.kernel import Kernel
+from ..riccati.volterra_riccati import right_point_adams_scheme
 
 
 @dataclass
@@ -26,15 +27,15 @@ class IVIHawkesProcess:
 
         ivi = IVIVolterra(is_continuous=False, resolvent_flag=self.resolvent_flag, kernel=self.kernel,
                           g0_bar=self.g0_bar, g0_bar_res=self.g0_bar_res, rng=self.rng, b=1, c=1, g0=self.g0)
-        U, Z, lam = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths)
+        U, Z, lam, alpha = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths, return_alpha=True)
         N = Z + U
 
         # Calculating integrated intensity from N
-        K_bar_mat = self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
-                    self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[1:].reshape(1, -1))
-        K_bar_mat = np.tril(K_bar_mat, k=-1)
-        U_from_N = ivi.g0_bar(t_grid).reshape((-1, 1)) + (K_bar_mat @ N[:-1])
-        return N, U, lam
+        #K_bar_mat = self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
+        #            self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[1:].reshape(1, -1))
+        #K_bar_mat = np.tril(K_bar_mat, k=-1)
+        #U_from_N = ivi.g0_bar(t_grid).reshape((-1, 1)) + (K_bar_mat @ N[:-1])
+        return N, alpha, lam
 
     def simulate_arrivals(self, t_grid, n_paths):
         ivi = IVIVolterra(is_continuous=False, resolvent_flag=self.resolvent_flag, kernel=self.kernel,
@@ -65,6 +66,18 @@ class IVIHawkesProcess:
         return self.g0_bar(t) + np.sum(np.where(t.reshape((-1, 1)) > t_jumps.reshape((1, -1)),
                                                 self.kernel.integrated_kernel(t.reshape((-1, 1)) - t_jumps.reshape((1, -1))),
                                                 0), axis=1)
+
+    def characteristic_function(self, T, w, n_steps, mode: str = "U"):
+        if mode == "U":
+            F = lambda t, p: w + np.exp(p) - 1
+        elif mode == "N":
+            F = lambda t, p: np.exp(w + p) - 1
+        else:
+            raise ValueError("Mode can take only the values `U` and `N`.")
+        psi, F_arr = right_point_adams_scheme(T=T, n_steps=n_steps, K=self.kernel, F=F)
+        t_grid = np.linspace(0, T, n_steps + 1)
+        dG_0 = np.diff(self.g0_bar(t_grid))
+        return np.exp(np.flip(F_arr[1:]) @ dG_0)
 
     @staticmethod
     def N_from_jumps(t, t_jumps):
