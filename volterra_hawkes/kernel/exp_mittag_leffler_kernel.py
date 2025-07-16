@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from scipy.special import gamma
 
 from .kernel import Kernel
-from ..utility.mittag_leffler import mittag_leffler
+from ..utility.kernel_functions import (mittag_leffler, integrated_exp_mittag_leffler_kernel,
+                                        double_integrated_exp_mittag_leffler_kernel)
 
 
 @dataclass
@@ -20,10 +21,10 @@ class ExpMittagLefflerKernel(Kernel):
         return result
 
     def integrated_kernel(self, t):
-        raise NotImplementedError()
+        return integrated_exp_mittag_leffler_kernel(t=t, alpha=self.alpha, lam=self.lam, c=self.c)
 
     def double_integrated_kernel(self, t):
-        raise NotImplementedError()
+        return double_integrated_exp_mittag_leffler_kernel(t=t, alpha=self.alpha, lam=self.lam, c=self.c)
 
     @property
     def resolvent(self) -> Kernel:

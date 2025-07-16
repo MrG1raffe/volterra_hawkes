@@ -50,10 +50,13 @@ def simulate_hawkes_ogata(
     rng: np.random.Generator = None,
     eps: float = 1e-11,
     batch_size: int = 10,
-    sim_counter: SimCounter = None
+    sim_counter: SimCounter = None,
+    decreasing_kernel: Union[Callable, Kernel] = None # used to get correct bounds for non-monotone kernels
 ):
     if rng is None:
         rng = np.random.default_rng(seed=42)
+    if decreasing_kernel is None:
+        decreasing_kernel = kernel
 
     ptr = 0
     batch_iter = 0
@@ -65,7 +68,7 @@ def simulate_hawkes_ogata(
     arrivals = np.empty(batch_size)
 
     while ptr <= T:
-        M = mu + kernel(ptr - arrivals[:event_counter] + eps).sum()
+        M = mu + decreasing_kernel(ptr - arrivals[:event_counter] + eps).sum()
         arrival_cand = ptr - np.log(uniform_batch[batch_iter, 0]) / M
         if uniform_batch[batch_iter, 1] < (mu + kernel(arrival_cand - arrivals[:event_counter]).sum()) / M:
             arrivals[event_counter] = arrival_cand

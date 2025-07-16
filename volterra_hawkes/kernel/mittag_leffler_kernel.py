@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from scipy.special import gamma
 
 from .kernel import Kernel
-from ..utility.mittag_leffler import mittag_leffler
+from ..utility.kernel_functions import mittag_leffler
 
 
 @dataclass
