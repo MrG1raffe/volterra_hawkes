@@ -1,6 +1,5 @@
 import numpy as np
 from numpy.typing import NDArray
-from numpy import float_
 from numpy.polynomial.polynomial import polyfromroots
 from scipy.linalg import circulant
 from scipy.interpolate import lagrange
@@ -18,13 +17,13 @@ class SumOfExponentialKernel(Kernel):
     c: np.ndarray = np.ones(1)
     lam: np.ndarray = np.zeros(1)
 
-    def __call__(self, t: NDArray[float_]):
+    def __call__(self, t: NDArray):
         return (self.c * np.exp(-self.lam * t[..., np.newaxis])).sum(axis=-1)
 
-    def integrated_kernel(self, t: NDArray[float_]):
+    def integrated_kernel(self, t: NDArray):
         return ((self.c / self.lam) * (1 - np.exp(-self.lam * t[..., np.newaxis]))).sum(axis=-1)
 
-    def double_integrated_kernel(self, t: NDArray[float_]):
+    def double_integrated_kernel(self, t: NDArray):
         return ((self.c / self.lam) * (t[..., np.newaxis] -
                                        (1 - np.exp(-self.lam * t[..., np.newaxis])) / self.lam)).sum(axis=-1)
 
@@ -87,7 +86,7 @@ class SumOfExponentialKernel(Kernel):
             betas *= -1
         return alphas.squeeze(), betas.squeeze()
 
-    def __k_der_0(self, der_order: Union[int, NDArray[float_]]):
+    def __k_der_0(self, der_order: Union[int, NDArray]):
         """
         Calculates the kernel derivative at t=0 of order `der_order`.
 

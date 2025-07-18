@@ -175,7 +175,7 @@ def plot_marginal_laws(samples, flag, methods=("Population", "Ogata", "iVi", "Re
                         line="45")
 
         print(f"p-value Population-{method}:", ks_2samp(X_T, X_T_exact).pvalue)
-        print(ks_2samp(X_T, X_T_exact))
+        # print(ks_2samp(X_T, X_T_exact))
         p_values_dict[f"Population-{method}"] = ks_2samp(X_T, X_T_exact).pvalue, ks_2samp(X_T, X_T_exact).statistic
 
     ax[0, 0].legend()

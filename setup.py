@@ -7,5 +7,5 @@ setup(
    author='MrG1raffe',
    author_email='dimitri.sotnikov@gmail.com',
    packages=find_packages(),
-   install_requires=['numpy', 'matplotlib', 'scipy'], #external packages as dependencies
+   install_requires=['numpy', 'matplotlib', 'scipy', 'statsmodels'], #external packages as dependencies
 )
