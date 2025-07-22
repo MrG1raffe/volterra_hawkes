@@ -227,3 +227,96 @@ def poisson_jumps_test(jumps, path=None,
         fig.savefig(fname=path, format="pdf", bbox_inches="tight", transparent=True)
 
     return kstest(rvs=data, cdf=lambda x: 1 - np.exp(-x)).pvalue, kstest(rvs=data, cdf=lambda x: 1 - np.exp(-x)).statistic
+
+
+def plot_cf_convergence(experiments, n_paths, n_steps_arr, samples_non_ivi,
+                        errors_ivi, path_experiment, fun, color_cycle=DEFAULT_COLOR_CYCLE):
+    # fun = lambda x: np.exp(w * x)
+    # cf_ref = {}
+    #
+    # for mode in ["U", "N"]:
+    #     rng = np.random.default_rng(seed=42)
+    #     ivi = IVIHawkesProcess(kernel=experiments[-1].kernel, g0_bar=experiments[-1].g0_bar, rng=rng,
+    #                            g0=experiments[-1].g0, resolvent_flag=False)
+    #     cf_ref[mode] = ivi.characteristic_function(T=experiments[-1].T, w=w, n_steps=10000, mode=mode)
+
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+    # errors_ivi = {}
+    for mode in ["U", "N"]:
+        idx = 1 if mode == "U" else 0
+
+        mc_std = 3 * fun(samples_non_ivi["Population"][idx][:, -1]).std() / np.sqrt(n_paths)
+
+        # errors_ivi[mode] = {}
+        methods = ["iVi", "Res iVi"]
+
+        for method in methods:
+            # errors_ivi[mode][method] = []
+            # for e in experiments:
+            #     U = samples_ivi[(method, e.n_steps)][idx]
+            #     errors_ivi[mode][method].append(np.abs(cf_ref[mode] - fun(U[:, -1]).mean()))
+            ax[idx].loglog(n_steps_arr, errors_ivi[mode][method], label=method)
+        ax[idx].hlines(y=3 * mc_std, xmin=n_steps_arr[0], xmax=n_steps_arr[-1], color="k", linestyles="--")
+        ax[idx].set_title(f"Characteristic function of ${mode}_T$")
+        ax[idx].legend()
+    fig.savefig(path_experiment + "CF_convergence_1.pdf", format="pdf", bbox_inches="tight", transparent=True)
+
+    fig, ax_arr = plt.subplots(1, 2, figsize=(12, 4))
+    methods_non_ivi = list(samples_non_ivi.keys())
+    for mode in ["U", "N"]:
+        idx = 1 if mode == "U" else 0
+        ax = ax_arr[idx]
+        for method in methods:
+            ax.scatter(errors_ivi[mode][method], 2 * np.array(n_steps_arr), marker="x", label=method)
+
+        for method, color in zip(methods_non_ivi, color_cycle[3:]):
+            # error = np.abs(cf_ref[mode] - fun(samples_non_ivi[method][idx][:, -1]).mean())
+            parts = ax.violinplot(samples_non_ivi[method][2], positions=[3 * mc_std], widths=0.001, showmeans=True,
+                                  showextrema=False)
+            ax.scatter([], [], c=color, label=method)
+            for pc in parts['bodies']:
+                pc.set_facecolor(color)  # blue fill
+                pc.set_edgecolor('black')  # black outline
+            parts['cmeans'].set_color(color)
+
+        ax.vlines(x=3 * mc_std, ymin=0, ymax=np.max(samples_non_ivi["Ogata"][2]), color="k", linestyles="--")
+
+        ax.legend()
+        ax.set_xlim([0, 0.01])
+        ax.set_xlabel("Absolute error")
+        ax.set_ylabel("Simulations per trajectory")
+        ax.set_title(f"Convergence of the CF of ${mode}_T$")
+    fig.savefig(path_experiment + "CF_convergence_2.pdf", format="pdf", bbox_inches="tight", transparent=True)
+
+    fig, ax_arr = plt.subplots(1, 2, figsize=(12, 4))
+    for mode in ["U", "N"]:
+        idx = 1 if mode == "U" else 0
+        ax = ax_arr[idx]
+
+        for method, color in zip(methods_non_ivi, color_cycle[3:]):
+            hist = ax.hist(samples_non_ivi[method][2], color=color, label=method, density=True, bins=100, alpha=0.5)
+            ax.vlines(np.mean(samples_non_ivi[method][2]), 0, hist[0].max(), linestyles="--", color=color)
+
+        ax.set_xlim([0, np.max(samples_non_ivi["Ogata"][2])])
+
+        # Create second y-axis
+        ax2 = ax.twinx()
+
+        for method in methods:
+            ax2.scatter(2 * np.array(n_steps_arr), errors_ivi[mode][method], marker="x", label=method)
+
+        ax2.hlines(y=3 * mc_std, xmin=0, xmax=np.max(samples_non_ivi["Ogata"][2]), color="k", linestyles="--")
+        ax2.set_ylim([0, 20 * mc_std])
+
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2)
+        ax2.grid(False)
+
+        ax.set_xlabel("Simulations per trajectory")
+        ax.set_ylabel("Density")
+
+        # ax.set_xlim([0, 0.01])
+        ax2.set_ylabel("Absolute error")
+        ax.set_title(f"Convergence of the CF of ${mode}_T$")
+    fig.savefig(path_experiment + "CF_convergence_3.pdf", format="pdf", bbox_inches="tight", transparent=True)

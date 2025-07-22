@@ -30,12 +30,18 @@ def mittag_leffler(t, alpha, beta, N=50):
 def integrated_exp_mittag_leffler_kernel(t, alpha, lam, c=1, N=50):
     t = np.array(t)
     ii = np.arange(N).reshape((1,) * len(t.shape) + (-1,))
-    return np.sum(integrated_gamma_kernel(t=t.reshape(t.shape + (1,)), alpha=alpha * (ii + 1),
-                                                      lam=lam, c=c**(ii + 1)), axis=-1)
+    # Numerically more stable that integrated_gamma_kernel
+    return np.sum((c / (lam ** alpha))**(ii + 1) * gammainc(alpha * (ii + 1), lam * t.reshape(t.shape + (1,))), axis=-1)
 
 
 def double_integrated_exp_mittag_leffler_kernel(t, alpha, lam, c=1, N=50):
     t = np.array(t)
     ii = np.arange(N).reshape((1,) * len(t.shape) + (-1,))
-    return np.sum(double_integrated_gamma_kernel(t=t.reshape(t.shape + (1,)), alpha=alpha * (ii + 1),
-                                                 lam=lam, c=c**(ii + 1)), axis=-1)
+
+    t_col = t.reshape(t.shape + (1,))
+    alpha_arr = alpha * (ii + 1)
+
+    return np.sum((c / (lam ** alpha))**(ii + 1) / lam * (lam * t_col * gammainc(alpha_arr, lam * t_col)
+                  - gammainc(alpha_arr + 1, lam * t_col) * alpha_arr), axis=-1)
+    # return np.sum(double_integrated_gamma_kernel(t=t.reshape(t.shape + (1,)), alpha=alpha * (ii + 1),
+    #                                              lam=lam, c=c**(ii + 1)), axis=-1)
