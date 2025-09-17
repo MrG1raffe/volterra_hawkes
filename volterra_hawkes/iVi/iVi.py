@@ -5,6 +5,7 @@ from typing import Callable
 from dataclasses import dataclass
 
 from ..kernel.kernel import Kernel
+from ..kernel.exponential_kernel import ExponentialKernel
 
 
 @dataclass
@@ -22,62 +23,80 @@ class IVIVolterra:
     def simulate_u_z(self, t_grid, n_paths, return_alpha: bool = False):
         n_steps = len(t_grid) - 1
         dt = t_grid[-1] / n_steps
-        res = self.kernel.resolvent
+        resolvent = self.kernel.resolvent
 
         # Compute the matrix \bar K_ij
         if self.resolvent_flag:
-            int_ker = res.integrated_kernel(dt)
-            int_matrix = res.integrated_kernel(t_grid[1:].reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
-                         res.integrated_kernel(t_grid[:-1].reshape(-1, 1) - t_grid[:-1].reshape(1, -1))
-            int_matrix = np.tril(int_matrix, k=-1)
+            ivi_kernel = resolvent
             b_alpha = self.b - 1  # b = 0
-        else:
-            int_ker = self.kernel.integrated_kernel(dt)
-            int_matrix = self.kernel.integrated_kernel(t_grid[1:].reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
-                         self.kernel.integrated_kernel(t_grid[:-1].reshape(-1, 1) - t_grid[:-1].reshape(1, -1))
-            int_matrix = np.tril(int_matrix, k=-1)
-            b_alpha = self.b  # b = 1
-
-        if (1 - b_alpha * int_ker) < 0:
-            raise ValueError("The denominator (1 - b * K_bar) cannot be negative. Reduce the discretization step.")
-
-        # Need to stock the Z, U now because of non-markovianity
-        dZ, dU, d_alpha = np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths))
-        if self.resolvent_flag:
             g0_bar_diff = np.diff(self.g0_bar_res(t_grid))
         else:
+            ivi_kernel = self.kernel
+            b_alpha = self.b  # b = 1
             g0_bar_diff = np.diff(self.g0_bar(t_grid))
+
+        int_kernel = ivi_kernel.integrated_kernel
+        int_ker_dt = int_kernel(dt)
+        if (1 - b_alpha * int_ker_dt) < 0:
+            raise ValueError("The denominator (1 - b * K_bar) cannot be negative. Reduce the discretization step.")
+
+        markov_flag = isinstance(ivi_kernel, ExponentialKernel)
+
+        if not markov_flag:
+            int_matrix = int_kernel(t_grid[1:].reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
+                         int_kernel(t_grid[:-1].reshape(-1, 1) - t_grid[:-1].reshape(1, -1))  # k_1
+            # int_matrix = int_kernel(t_grid[1:].reshape(-1, 1) - t_grid[1:].reshape(1, -1)) - \
+            #              int_kernel(t_grid[:-1].reshape(-1, 1) - t_grid[1:].reshape(1, -1))  # k_0
+            int_matrix = np.tril(int_matrix, k=-1)
+        else:
+            mult_coef = np.exp(-ivi_kernel.lam * dt)
+            k = (int_kernel(2*dt) - int_kernel(dt)) # k = k1
+            # or k = k0 = int_kernel(dt)
+            # or k = k_bar_bar = (double_int_kernel(2 * dt) - 2 * double_int_kernel(dt) + double_int_kernel(0)) / dt
+
+        # Need to stock the Z, U now because of non-markovianity
+        dZ, dU, d_alpha, d_xi = np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths))
 
         # g0_bar_no_res_diff = np.diff(self.g0_bar(t_grid))
 
+        alpha_i = 0
+        dU_i = 0
         for i in range(n_steps):
-            alpha_i = g0_bar_diff[i] + self.c * int_matrix[i, :] @ dZ + b_alpha * int_matrix[i, :] @ dU
-
+            if not markov_flag:
+                alpha_i = g0_bar_diff[i] + self.c * int_matrix[i, :] @ dZ + b_alpha * int_matrix[i, :] @ d_xi
+            else:
+                if i == 0:
+                    alpha_i = g0_bar_diff[i]
+                else:
+                    # alpha_i = g0_bar_diff[i] + (dU_i - g0_bar_diff[i - 1]) * mult_coef
+                    alpha_i = (g0_bar_diff[i] + (alpha_i - g0_bar_diff[i - 1]) * mult_coef +
+                               (self.c * dZ[i - 1, :] + b_alpha * dU[i - 1, :]) * k)
             if np.any(alpha_i < 0):
                 scheme_name = "iVi" if not self.resolvent_flag else "iVi Res"
+                print(f"Achtung! Negative alpha encountered in {scheme_name} scheme. Setting to 0.")
                 warnings.warn(f"Negative alpha encountered in {scheme_name} scheme. Setting to 0.")
                 alpha_i = np.maximum(alpha_i, 1e-6)
-            mu = alpha_i / (1 - b_alpha * int_ker)
-            # print(mu)
-            lambda_ = (alpha_i / (self.c * int_ker))**2
-            dU_i = self.rng.wald(mean=mu, scale=lambda_, size=n_paths)
+
+            mu = alpha_i / (1 - b_alpha * int_ker_dt)
+            lambda_ = (alpha_i / (self.c * int_ker_dt))**2
+            d_xi_i = self.rng.wald(mean=mu, scale=lambda_, size=n_paths)
 
             if self.is_continuous:
-                dZ_i = ((1 - b_alpha * int_ker) * dU_i - alpha_i) / (self.c * int_ker)
+                dU_i = d_xi_i
+                dZ_i = ((1 - b_alpha * int_ker_dt) * dU_i - alpha_i) / (self.c * int_ker_dt)
             else:
-                dZ_i = self.rng.poisson(lam=dU_i, size=n_paths) - dU_i
+                dN_i = self.rng.poisson(lam=d_xi_i, size=n_paths)
+                dZ_i = dN_i - d_xi_i
+                dU_i = (alpha_i + int_ker_dt * self.c * dN_i) / (1 + int_ker_dt * (self.c - b_alpha))
 
+            d_xi[i, :] = d_xi_i
             dZ[i, :] = dZ_i
-            d_alpha[i, :] = alpha_i
+            d_alpha[i, :] = dU_i # alpha_i # TO CHANGE BACK TO alpha!
             dU[i, :] = dU_i
-
-        # d_alpha = np.maximum(d_alpha, g0_bar_no_res_diff[:, None])
 
         Z = np.vstack([np.zeros((1, n_paths)), np.cumsum(dZ, axis=0)])
         U = np.vstack([np.zeros((1, n_paths)), np.cumsum(dU, axis=0)])
         alpha = np.vstack([np.zeros((1, n_paths)), np.cumsum(d_alpha, axis=0)])
-
-        # alpha = np.maximum(alpha, self.g0_bar(t_grid)[:, None])
 
         if return_alpha:
             return U, Z, alpha

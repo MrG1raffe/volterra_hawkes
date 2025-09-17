@@ -63,7 +63,6 @@ class SumOfExponentialKernel(Kernel):
             alphas = np.array([b[0] * betas[1] - b[1], b[1] - b[0] * betas[0]]) / (betas[1] - betas[0])
             betas *= -1
         else:
-
             # in general case, the roots of the characteristic polynomial are found numerically.
             K_der_lam = self.__k_der_0(np.arange(n_factors)) * mu
             p = polyfromroots(-self.lam)

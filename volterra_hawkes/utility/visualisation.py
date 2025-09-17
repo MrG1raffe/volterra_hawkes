@@ -9,8 +9,10 @@ import statsmodels.api as sm
 from typing import Callable, Union
 
 from .sim_counter import SimCounter
+from ..kernel.exponential_kernel import ExponentialKernel
+from ..kernel.gamma_kernel import GammaKernel
 from ..kernel.kernel import Kernel
-from ..point_processes.hawkes import simulate_hawkes, simulate_hawkes_ogata, U_from_jumps, lam_from_jumps, N_from_jumps
+from ..point_processes.hawkes import simulate_hawkes, simulate_hawkes_ogata, U_from_jumps, lam_from_jumps, N_from_jumps, simulate_exponential_hawkes
 from ..iVi.iVi_hawkes import IVIHawkesProcess
 
 
@@ -30,6 +32,12 @@ class Experiment:
         self.g0_bar = lambda t: self.mu * t
         self.g0_bar_res = lambda t: self.mu * t + self.mu * self.kernel.resolvent.double_integrated_kernel(t)
         self.t_grid = np.linspace(0, self.T, self.n_steps + 1)
+
+        if isinstance(self.kernel, GammaKernel):
+            t0_gamma_sc = (self.kernel.alpha - 1) / self.kernel.lam
+            def decreasing_kernel(t):
+                return self.kernel(t) * (t > t0_gamma_sc) + self.kernel(t0_gamma_sc) * (t <= t0_gamma_sc)
+            self.decreasing_kernel = decreasing_kernel
 
     def change_n_steps(self, n_steps):
         res = Experiment(T=self.T, n_steps=n_steps, kernel=self.kernel, mu=self.mu, decreasing_kernel=self.decreasing_kernel)
@@ -66,6 +74,21 @@ def get_N_U_sample(experiment: Experiment, method: str, n_paths: int, rng=None, 
             return N_sample, U_sample, [sim_counter.counter for sim_counter in sim_counters]
         else:
             return N_sample, U_sample
+    elif method == "ExpExact":
+        if not isinstance(experiment.kernel, ExponentialKernel):
+            raise ValueError("The method ExpExact only works for exponential kernels.")
+        sim_counters = [SimCounter() for _ in range(n_paths)]
+        hawkes_arrivals_sample = [simulate_exponential_hawkes(T=experiment.T, mean_intensity=experiment.mu, init_intensity=experiment.mu,
+                                                              kernel=experiment.kernel, rng=rng, sim_counter=sim_counter) for
+                                  sim_counter in sim_counters]
+        N_sample = np.array([N_from_jumps(np.array(experiment.t_grid), hawkes_arrivals)
+                             for hawkes_arrivals in hawkes_arrivals_sample])
+        U_sample = np.array([U_from_jumps(np.array(experiment.t_grid), hawkes_arrivals, kernel=experiment.kernel, g0_bar=experiment.g0_bar)
+                             for hawkes_arrivals in hawkes_arrivals_sample])
+        if return_counters:
+            return N_sample, U_sample, [sim_counter.counter for sim_counter in sim_counters]
+        else:
+            return N_sample, U_sample
     elif method == "iVi":
         ivi_hawkes = IVIHawkesProcess(kernel=experiment.kernel, g0_bar=experiment.g0_bar, rng=rng, g0=experiment.g0,
                                       resolvent_flag=False)
@@ -91,6 +114,12 @@ def get_arrivals_sample(experiment: Experiment, method: str, n_paths: int, rng=N
         hawkes_arrivals_sample = [
             simulate_hawkes_ogata(T=experiment.T, mu=experiment.mu, kernel=experiment.kernel, rng=rng, batch_size=400,
                                   decreasing_kernel=experiment.decreasing_kernel)
+            for _ in range(n_paths)]
+        return hawkes_arrivals_sample
+    elif method == "ExpExact":
+        hawkes_arrivals_sample = [
+            simulate_exponential_hawkes(T=experiment.T, mean_intensity=experiment.mu, init_intensity=experiment.mu,
+                                        kernel=experiment.kernel, rng=rng)
             for _ in range(n_paths)]
         return hawkes_arrivals_sample
     elif method == "iVi":
@@ -144,8 +173,15 @@ def plot_trajectories(e, n_paths=10, path: str = None):
     if path is not None:
         fig.savefig(fname=path, format="pdf", bbox_inches="tight", transparent=True)
 
+def plot_kernel(experiment: Experiment):
+    plt.plot(experiment.t_grid, experiment.kernel(experiment.t_grid), label="kernel")
+    if experiment.decreasing_kernel is not None:
+        plt.plot(experiment.t_grid, experiment.decreasing_kernel(experiment.t_grid), label="decreasing kernel")
 
-def plot_marginal_laws(samples, flag, methods=("Population", "Ogata", "iVi", "Res iVi"), path=None):
+    plt.plot(experiment.t_grid, experiment.kernel.resolvent(experiment.t_grid), label="resolvent")
+    plt.legend()
+
+def plot_marginal_laws(results, samples, flag, path=None):
     if flag == "N":
         idx = 0
     elif flag == "U":
@@ -155,13 +191,16 @@ def plot_marginal_laws(samples, flag, methods=("Population", "Ogata", "iVi", "Re
 
     fig, ax = plt.subplots(3, 2, figsize=(13, 9))
 
-    X_T_exact = samples["Population"][idx][:, -1]
+    methods = list(results["methods_non_ivi"]) + list(results["methods_ivi"])
+    exact_method = methods[0]
+    X_T_exact = samples[exact_method][idx][:, -1]
     # x_grid = np.linspace(2, 4, 1000)
     x_grid = np.linspace(0, np.max(X_T_exact), 1000)
-    ecdf_exact = sm.distributions.ECDF(samples["Population"][idx][:, -1])
+    ecdf_exact = sm.distributions.ECDF(samples[exact_method][idx][:, -1])
     ax[0, 0].plot(x_grid, ecdf_exact(x_grid), label=methods[0], color="k")
 
     p_values_dict = dict()
+    print(f"Process: {flag}")
     for method, ax_qq in zip(methods[1:], [ax[1, 1], ax[2, 0], ax[2, 1]]):
         X_T = samples[method][idx][:, -1]
         ecdf = sm.distributions.ECDF(X_T)
@@ -171,12 +210,12 @@ def plot_marginal_laws(samples, flag, methods=("Population", "Ogata", "iVi", "Re
         ax[1, 0].hist(X_T, density=True, bins=75, alpha=0.3, label=method)
         ax[0, 1].plot(x_grid, np.abs(ecdf(x_grid) - ecdf_exact(x_grid)), label=method)
         # print(method, np.max(np.abs(ecdf(x_grid) - ecdf_exact(x_grid))))
-        qqplot_2samples(sm.ProbPlot(X_T_exact), sm.ProbPlot(X_T), ax=ax_qq, xlabel="Population", ylabel=method,
+        qqplot_2samples(sm.ProbPlot(X_T_exact), sm.ProbPlot(X_T), ax=ax_qq, xlabel=exact_method, ylabel=method,
                         line="45")
 
-        print(f"p-value Population-{method}:", ks_2samp(X_T, X_T_exact).pvalue)
+        print(f"p-value {exact_method}-{method}:", ks_2samp(X_T, X_T_exact).pvalue)
         # print(ks_2samp(X_T, X_T_exact))
-        p_values_dict[f"Population-{method}"] = ks_2samp(X_T, X_T_exact).pvalue, ks_2samp(X_T, X_T_exact).statistic
+        p_values_dict[f"{exact_method}-{method}"] = ks_2samp(X_T, X_T_exact).pvalue, ks_2samp(X_T, X_T_exact).statistic
 
     ax[0, 0].legend()
     ax[0, 1].legend()
@@ -190,7 +229,7 @@ def plot_marginal_laws(samples, flag, methods=("Population", "Ogata", "iVi", "Re
 
 def poisson_jumps_test(jumps, path=None,
                        color_cycle=DEFAULT_COLOR_CYCLE,
-                       ax: matplotlib.axes = None):
+                       ax: matplotlib.axes = None, fig = None):
     data = np.diff(jumps, prepend=0)
     data_unif = 1 - np.exp(-data)
 
@@ -229,94 +268,46 @@ def poisson_jumps_test(jumps, path=None,
     return kstest(rvs=data, cdf=lambda x: 1 - np.exp(-x)).pvalue, kstest(rvs=data, cdf=lambda x: 1 - np.exp(-x)).statistic
 
 
-def plot_cf_convergence(experiments, n_paths, n_steps_arr, samples_non_ivi,
-                        errors_ivi, path_experiment, fun, color_cycle=DEFAULT_COLOR_CYCLE):
-    # fun = lambda x: np.exp(w * x)
-    # cf_ref = {}
-    #
-    # for mode in ["U", "N"]:
-    #     rng = np.random.default_rng(seed=42)
-    #     ivi = IVIHawkesProcess(kernel=experiments[-1].kernel, g0_bar=experiments[-1].g0_bar, rng=rng,
-    #                            g0=experiments[-1].g0, resolvent_flag=False)
-    #     cf_ref[mode] = ivi.characteristic_function(T=experiments[-1].T, w=w, n_steps=10000, mode=mode)
+def plot_cf_convergence(results: dict, path_experiment: str, x_lim = None):
+    n_steps_arr = results["n_steps_arr_cf"]
+    methods_ivi = results["methods_ivi"]
 
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-    # errors_ivi = {}
     for mode in ["U", "N"]:
         idx = 1 if mode == "U" else 0
-
-        mc_std = 3 * fun(samples_non_ivi["Population"][idx][:, -1]).std() / np.sqrt(n_paths)
-
-        # errors_ivi[mode] = {}
-        methods = ["iVi", "Res iVi"]
-
-        for method in methods:
-            # errors_ivi[mode][method] = []
-            # for e in experiments:
-            #     U = samples_ivi[(method, e.n_steps)][idx]
-            #     errors_ivi[mode][method].append(np.abs(cf_ref[mode] - fun(U[:, -1]).mean()))
-            ax[idx].loglog(n_steps_arr, errors_ivi[mode][method], label=method)
-        ax[idx].hlines(y=3 * mc_std, xmin=n_steps_arr[0], xmax=n_steps_arr[-1], color="k", linestyles="--")
-        ax[idx].set_title(f"Characteristic function of ${mode}_T$")
+        for method in methods_ivi:
+            ax[idx].loglog(n_steps_arr, results["errors_ivi"][mode][method], label=method)
+            # ax[idx].hlines(y=3 * results["mc_std_" + method + "_" + mode], xmin=n_steps_arr[0], xmax=n_steps_arr[-1], linestyles="--", label="3 std (" + method + ")")
+        ax[idx].hlines(y=3 * results["mc_std_" + mode], xmin=n_steps_arr[0], xmax=n_steps_arr[-1], color="k", linestyles="--", label="3 std")
+        ax[idx].set_title(f"Laplace transform of ${mode}_T$")
         ax[idx].legend()
     fig.savefig(path_experiment + "CF_convergence_1.pdf", format="pdf", bbox_inches="tight", transparent=True)
 
+
+
     fig, ax_arr = plt.subplots(1, 2, figsize=(12, 4))
-    methods_non_ivi = list(samples_non_ivi.keys())
+    methods_non_ivi = results["methods_non_ivi"]
+    methods_ivi = results["methods_ivi"]
     for mode in ["U", "N"]:
         idx = 1 if mode == "U" else 0
         ax = ax_arr[idx]
-        for method in methods:
-            ax.scatter(errors_ivi[mode][method], 2 * np.array(n_steps_arr), marker="x", label=method)
+        for method in methods_ivi:
+            exec_times = [results["time_" + method + "_" + str(n_steps)] for n_steps in n_steps_arr]
+            ax.scatter(results["errors_ivi"][mode][method], exec_times, marker="x", label=method)
 
-        for method, color in zip(methods_non_ivi, color_cycle[3:]):
-            # error = np.abs(cf_ref[mode] - fun(samples_non_ivi[method][idx][:, -1]).mean())
-            parts = ax.violinplot(samples_non_ivi[method][2], positions=[3 * mc_std], widths=0.001, showmeans=True,
-                                  showextrema=False)
-            ax.scatter([], [], c=color, label=method)
-            for pc in parts['bodies']:
-                pc.set_facecolor(color)  # blue fill
-                pc.set_edgecolor('black')  # black outline
-            parts['cmeans'].set_color(color)
+        for method, color in zip(methods_non_ivi, DEFAULT_COLOR_CYCLE[3:]):
+            ax.hlines(y=results["time_" + method], xmin=0, xmax=np.max(results["errors_ivi"][mode]["iVi"]),
+                      color=color, label=method)
 
-        ax.vlines(x=3 * mc_std, ymin=0, ymax=np.max(samples_non_ivi["Ogata"][2]), color="k", linestyles="--")
+        ymax = max([results["time_" + method] for method in methods_non_ivi])
+        ax.vlines(x=3 * results["mc_std_" + mode], ymin=0, ymax=ymax, color="k", linestyles="--", label="3 std")
+        if x_lim is not None:
+            ax.set_xlim(x_lim)
+        # ax.set_title(f"Simulation time, ${mode}_T$")
 
         ax.legend()
-        ax.set_xlim([0, 0.01])
-        ax.set_xlabel("Absolute error")
-        ax.set_ylabel("Simulations per trajectory")
-        ax.set_title(f"Convergence of the CF of ${mode}_T$")
+        ax.set_xlabel(f"Absolute error, {mode}")
+        ax.set_ylabel("Simulations time, s")
+        ax.legend()
+
     fig.savefig(path_experiment + "CF_convergence_2.pdf", format="pdf", bbox_inches="tight", transparent=True)
-
-    fig, ax_arr = plt.subplots(1, 2, figsize=(12, 4))
-    for mode in ["U", "N"]:
-        idx = 1 if mode == "U" else 0
-        ax = ax_arr[idx]
-
-        for method, color in zip(methods_non_ivi, color_cycle[3:]):
-            hist = ax.hist(samples_non_ivi[method][2], color=color, label=method, density=True, bins=100, alpha=0.5)
-            ax.vlines(np.mean(samples_non_ivi[method][2]), 0, hist[0].max(), linestyles="--", color=color)
-
-        ax.set_xlim([0, np.max(samples_non_ivi["Ogata"][2])])
-
-        # Create second y-axis
-        ax2 = ax.twinx()
-
-        for method in methods:
-            ax2.scatter(2 * np.array(n_steps_arr), errors_ivi[mode][method], marker="x", label=method)
-
-        ax2.hlines(y=3 * mc_std, xmin=0, xmax=np.max(samples_non_ivi["Ogata"][2]), color="k", linestyles="--")
-        ax2.set_ylim([0, 20 * mc_std])
-
-        lines1, labels1 = ax.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        ax.legend(lines1 + lines2, labels1 + labels2)
-        ax2.grid(False)
-
-        ax.set_xlabel("Simulations per trajectory")
-        ax.set_ylabel("Density")
-
-        # ax.set_xlim([0, 0.01])
-        ax2.set_ylabel("Absolute error")
-        ax.set_title(f"Convergence of the CF of ${mode}_T$")
-    fig.savefig(path_experiment + "CF_convergence_3.pdf", format="pdf", bbox_inches="tight", transparent=True)

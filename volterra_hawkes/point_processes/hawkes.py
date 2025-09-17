@@ -4,6 +4,7 @@ from numpy import float64
 from typing import Callable, Union
 
 from .poisson import inhomogeneous_poisson_field_on_interval_thinning, inhomogeneous_poisson_field_on_interval_inversion
+from ..kernel.exponential_kernel import ExponentialKernel
 from ..kernel.kernel import Kernel
 from ..utility.sim_counter import SimCounter
 
@@ -42,6 +43,53 @@ def simulate_hawkes(
     hawkes_arrivals = np.sort(hawkes_arrivals)
     return hawkes_arrivals
 
+def simulate_exponential_hawkes(
+    T: float,
+    kernel: ExponentialKernel,
+    mean_intensity: float,
+    init_intensity: float,
+    rng: np.random.Generator = None,
+    sim_counter: SimCounter = None
+) -> NDArray[float64]:
+    """
+    Simulates a trajectory of an exponential Hawkes process with intensity
+
+    λ_t = a + (λ_0 - a)exp(-lam * t) + sum_{T_k < t} c exp(-lam(t - T_k)).
+
+    :param T:
+    :param kernel:
+    :param mean_intensity:
+    :param init_intensity:
+    :param rng:
+    :param sim_counter:
+    :return:
+    """
+    if rng is None:
+        rng = np.random.default_rng(seed=42)
+
+    hawkes_arrivals = []
+    lam, c = kernel.lam, kernel.c
+
+    current_intensity = init_intensity + 0.00001
+    current_arrival = 0
+
+    while current_arrival < T:
+        U = rng.uniform(size=2)
+        if sim_counter is not None:
+            sim_counter.add(U.size)
+        D = 1 + lam * np.log(U[0]) / (current_intensity - mean_intensity)
+        S_2 = -np.log(U[1]) / mean_intensity
+        if D > 0:
+            S_1 = -np.log(D) / lam
+            S = min(S_1, S_2)
+        else:
+            S = S_2
+        current_arrival += S
+        current_intensity = (current_intensity - mean_intensity) * np.exp(-lam * S) + mean_intensity + c
+        hawkes_arrivals.append(current_arrival)
+
+    return np.array(hawkes_arrivals)[:-1]  # the last arrival is > T.
+
 
 def simulate_hawkes_ogata(
     T: float,
@@ -67,17 +115,25 @@ def simulate_hawkes_ogata(
         sim_counter.add(uniform_batch.size)
     arrivals = np.empty(batch_size)
 
-    while ptr <= T:
-        M = mu + decreasing_kernel(ptr - arrivals[:event_counter] + eps).sum()
-        arrival_cand = ptr - np.log(uniform_batch[batch_iter, 0]) / M
-        if uniform_batch[batch_iter, 1] < (mu + kernel(arrival_cand - arrivals[:event_counter]).sum()) / M:
+    thinning_step = 0
+    M = mu
+    is_accepted = False
+    while ptr < T:
+        if isinstance(kernel, ExponentialKernel):
+            M = mu + np.exp(-thinning_step * kernel.lam) * (M - mu) + is_accepted * kernel.c
+        else:
+            M = mu + decreasing_kernel(ptr - arrivals[:event_counter] + eps).sum()
+        thinning_step = - np.log(uniform_batch[batch_iter, 0]) / M
+        arrival_cand = ptr + thinning_step
+
+        is_accepted = uniform_batch[batch_iter, 1] < (mu + kernel(arrival_cand - arrivals[:event_counter]).sum()) / M
+        if is_accepted:
             arrivals[event_counter] = arrival_cand
             event_counter += 1
             if event_counter == arrivals.size:
                 arrivals = np.concatenate([arrivals, np.empty(batch_size)])
 
         ptr = arrival_cand
-
         batch_iter += 1
         if batch_iter == batch_size:
             uniform_batch = rng.uniform(size=(batch_size, 2))
@@ -85,7 +141,6 @@ def simulate_hawkes_ogata(
                 sim_counter.add(uniform_batch.size)
             batch_iter = 0
 
-    #  print("Number of jumps: ", len(arrivals), "Number of iterations: ", number_of_iter, "Acceptance rate: ", len(arrivals) / number_of_iter)
     return arrivals[:event_counter - 1]
 
 
