@@ -44,6 +44,10 @@ class Experiment:
         return res
 
 
+def get_process_name(mode: str):
+    return "$\Lambda_T$" if mode == "U" else "$N_T$"
+
+
 def get_N_U_sample(experiment: Experiment, method: str, n_paths: int, rng=None, return_counters: bool = False):
     if rng is None:
         rng = np.random.default_rng(seed=42)
@@ -133,42 +137,31 @@ def get_arrivals_sample(experiment: Experiment, method: str, n_paths: int, rng=N
         return ivi_hawkes_res.simulate_arrivals(t_grid=experiment.t_grid, n_paths=n_paths)
 
 
-def plot_trajectories(e, n_paths=10, path: str = None):
+def plot_trajectories(e, n_paths=10, path: str = None, resolvent_flag: bool = False):
     rng = np.random.default_rng(seed=42)
 
-    ivi_hawkes = IVIHawkesProcess(kernel=e.kernel, g0_bar=e.g0_bar, rng=rng, g0=e.g0)
-    ivi_hawkes_res = IVIHawkesProcess(kernel=e.kernel, g0_bar=e.g0_bar_res, g0_bar_res=e.g0_bar_res, rng=rng, g0=e.g0,
-                                      resolvent_flag=True)
+    ivi_hawkes = IVIHawkesProcess(kernel=e.kernel, g0_bar=e.g0_bar, g0_bar_res=e.g0_bar_res, rng=rng, g0=e.g0,
+                                  resolvent_flag=resolvent_flag)
 
     N, U, lam = ivi_hawkes.simulate_on_grid(t_grid=e.t_grid, n_paths=n_paths)
-    N_res, U_res, lam_res = ivi_hawkes_res.simulate_on_grid(t_grid=e.t_grid, n_paths=n_paths)
 
-    fig, ax = plt.subplots(2, 3, figsize=(13, 6))
+    fig, ax = plt.subplots(1, 3, figsize=(13, 3))
     n_show = n_paths
 
-    ax[0, 0].plot(e.t_grid, N[:, 0:n_show])
-    ax[0, 0].set_title('Hawkes process N')
-    ax[0, 0].grid("on")
+    ax[0].plot(e.t_grid, N[:, 0:n_show])
+    ax[0].set_xlabel('t')
+    ax[0].set_ylabel(r'Hawkes process $N$')
+    ax[0].grid("on")
 
-    ax[0, 1].plot(e.t_grid, U[:, 0:n_show])
-    ax[0, 1].set_title('Integrated intensity U')
-    ax[0, 1].grid("on")
+    ax[1].plot(e.t_grid, U[:, 0:n_show])
+    ax[1].set_xlabel('t')
+    ax[1].set_ylabel(r'Integrated intensity $\Lambda$')
+    ax[1].grid("on")
 
-    ax[0, 2].plot(e.t_grid, lam[:, 0:n_show])
-    ax[0, 2].set_title('Instantaneous intensity $\lambda$')
-    ax[0, 2].grid("on")
-
-    ax[1, 0].plot(e.t_grid, N_res[:, 0:n_show])
-    ax[1, 0].set_title('Hawkes process N (res)')
-    ax[1, 0].grid("on")
-
-    ax[1, 1].plot(e.t_grid, U_res[:, 0:n_show])
-    ax[1, 1].set_title('Integrated intensity U (res)')
-    ax[1, 1].grid("on")
-
-    ax[1, 2].plot(e.t_grid, lam_res[:, 0:n_show])
-    ax[1, 2].set_title('Instantaneous intensity $\lambda$ (res)')
-    ax[1, 2].grid("on")
+    ax[2].plot(e.t_grid, lam[:, 0:n_show])
+    ax[2].set_xlabel('t')
+    ax[2].set_ylabel(r'Instantaneous intensity $\lambda$')
+    ax[2].grid("on")
 
     if path is not None:
         fig.savefig(fname=path, format="pdf", bbox_inches="tight", transparent=True)
@@ -181,7 +174,7 @@ def plot_kernel(experiment: Experiment):
     plt.plot(experiment.t_grid, experiment.kernel.resolvent(experiment.t_grid), label="resolvent")
     plt.legend()
 
-def plot_marginal_laws(results, samples, flag, path=None):
+def plot_marginal_laws_old(results, samples, flag, path=None):
     if flag == "N":
         idx = 0
     elif flag == "U":
@@ -194,7 +187,6 @@ def plot_marginal_laws(results, samples, flag, path=None):
     methods = list(results["methods_non_ivi"]) + list(results["methods_ivi"])
     exact_method = methods[0]
     X_T_exact = samples[exact_method][idx][:, -1]
-    # x_grid = np.linspace(2, 4, 1000)
     x_grid = np.linspace(0, np.max(X_T_exact), 1000)
     ecdf_exact = sm.distributions.ECDF(samples[exact_method][idx][:, -1])
     ax[0, 0].plot(x_grid, ecdf_exact(x_grid), label=methods[0], color="k")
@@ -226,6 +218,54 @@ def plot_marginal_laws(results, samples, flag, path=None):
 
     return p_values_dict
 
+def plot_marginal_laws(results, samples, flag, path=None):
+    methods = results["methods_non_ivi"] + results["methods_ivi"][0:1]
+    exact_method = methods[0]
+
+    if flag == "N":
+        idx = 0
+    elif flag == "U":
+        idx = 1
+    else:
+        raise ValueError("flag must be 'N' or 'U'")
+
+    fig, ax = plt.subplots(2, 2, figsize=(12, 6))
+
+    X_T_exact = samples[exact_method][idx][:, -1]
+    x_grid = np.linspace(0, np.max(X_T_exact), 500)
+    bins = np.arange(np.floor(np.max(X_T_exact)))
+
+    ecdf_exact = sm.distributions.ECDF(samples[exact_method][idx][:, -1])
+    ax[0, 0].hist(samples[exact_method][idx][:, -1], density=True, bins=bins, alpha=0.3, color="k", label=methods[0])
+    ax[0, 0].set_ylabel(r"Histogram of " + get_process_name(flag))
+    ax[0, 1].set_ylabel(r"ECDF distance, " + get_process_name(flag))
+
+    p_values_dict = dict()
+    for method, ax_qq in zip(methods[1:], [ax[1, 0], ax[1, 1]]):
+        X_T = samples[method][idx][:, -1]
+        if flag == "N":
+            X_T = np.round(X_T)
+        ecdf = sm.distributions.ECDF(X_T)
+        # x_grid = np.linspace(2, 4, 1000)
+        # x_grid = np.linspace(0, max(np.max(X_T), np.max(X_T_exact)), 1000)
+        # ax[0, 0].plot(x_grid, ecdf(x_grid), label=method)
+        ax[0, 0].hist(X_T, density=True, bins=bins, alpha=0.3, label=method)
+        ax[0, 1].plot(x_grid, np.abs(ecdf(x_grid) - ecdf_exact(x_grid)), label=method)
+        # print(method, np.max(np.abs(ecdf(x_grid) - ecdf_exact(x_grid))))
+        qqplot_2samples(sm.ProbPlot(X_T_exact), sm.ProbPlot(X_T), ax=ax_qq, xlabel=exact_method, ylabel=method,
+                        line="45")
+
+        print(f"p-value {exact_method}-{method}:", ks_2samp(X_T, X_T_exact).pvalue)
+        # print(ks_2samp(X_T, X_T_exact))
+        p_values_dict[f"{exact_method}-{method}"] = ks_2samp(X_T, X_T_exact).pvalue, ks_2samp(X_T, X_T_exact).statistic
+
+    ax[0, 0].legend()
+    ax[0, 1].legend()
+
+    # if path is not None:
+    if path is not None:
+        fig.savefig(fname=path, format="pdf", bbox_inches="tight", transparent=True)
+
 
 def poisson_jumps_test(jumps, path=None,
                        color_cycle=DEFAULT_COLOR_CYCLE,
@@ -242,22 +282,23 @@ def poisson_jumps_test(jumps, path=None,
     # Q-Q plot
     if ax is None:
         fig, ax = plt.subplots(1, 3, figsize=(10, 3))
-    ax[0].scatter(theoretical_quantiles, empirical_quantiles, label="Observed vs. Exponential", s=10)
-    ax[0].plot(theoretical_quantiles, theoretical_quantiles, c=color_cycle[1], linestyle="dashed", label="y = x")
+    ax[0].scatter(theoretical_quantiles, empirical_quantiles, s=10)
+    ax[0].plot(theoretical_quantiles, theoretical_quantiles, c=color_cycle[1], linestyle="dashed")
 
     ax[0].set_xlabel("Theoretical Quantiles (Exponential)")
     ax[0].set_ylabel("Empirical Quantiles (Data)")
-    ax[0].set_title("Q-Q Plot Against Exponential Distribution")
-    ax[0].legend()
+    # ax[0].set_title("Q-Q Plot Against Exponential Distribution")
+    # ax[0].legend()
 
     ax[2].scatter(data_unif[:-1], data_unif[1:], s=10)
-    ax[2].set_title(r"$(e^{-\tau_i}, e^{-\tau_{i+1}})$")
+    ax[2].set_xlabel(r"$e^{-\tau_i}$")
+    ax[2].set_ylabel(r"$e^{-\tau_{i+1}}$")
 
     x_grid = np.linspace(data.min(), data.max(), num=1000)
     ecdf = sm.distributions.ECDF(data)
     ax[1].plot(x_grid, ecdf(x_grid), label="ECDF")
-    ax[1].plot(x_grid, 1 - np.exp(-x_grid), "--", label="Exact CDF")
-    ax[1].set_title("Empirical CDF")
+    ax[1].plot(x_grid, 1 - np.exp(-x_grid), "--", label="Exact")
+    ax[1].set_ylabel("CDF")
     ax[1].legend()
 
     print("Kolmogorov-Smirnov test p-value: ", kstest(rvs=data, cdf=lambda x: 1 - np.exp(-x)).pvalue)
@@ -268,7 +309,7 @@ def poisson_jumps_test(jumps, path=None,
     return kstest(rvs=data, cdf=lambda x: 1 - np.exp(-x)).pvalue, kstest(rvs=data, cdf=lambda x: 1 - np.exp(-x)).statistic
 
 
-def plot_cf_convergence(results: dict, path_experiment: str, x_lim = None):
+def plot_cf_convergence(results: dict, path_experiment: str, is_log_time: bool = False):
     n_steps_arr = results["n_steps_arr_cf"]
     methods_ivi = results["methods_ivi"]
 
@@ -277,11 +318,12 @@ def plot_cf_convergence(results: dict, path_experiment: str, x_lim = None):
         idx = 1 if mode == "U" else 0
         for method in methods_ivi:
             ax[idx].loglog(n_steps_arr, results["errors_ivi"][mode][method], label=method)
-            # ax[idx].hlines(y=3 * results["mc_std_" + method + "_" + mode], xmin=n_steps_arr[0], xmax=n_steps_arr[-1], linestyles="--", label="3 std (" + method + ")")
         ax[idx].hlines(y=3 * results["mc_std_" + mode], xmin=n_steps_arr[0], xmax=n_steps_arr[-1], color="k", linestyles="--", label="3 std")
-        ax[idx].set_title(f"Laplace transform of ${mode}_T$")
+        ax[idx].set_xlabel(r"$\log(n)$")
+        process_name = "$\Lambda_T$" if mode == "U" else "$N_T$"
+        ax[idx].set_ylabel(r"Absolute error, " + process_name)
         ax[idx].legend()
-    fig.savefig(path_experiment + "CF_convergence_1.pdf", format="pdf", bbox_inches="tight", transparent=True)
+    fig.savefig(path_experiment + "CF_convergence.pdf", format="pdf", bbox_inches="tight", transparent=True)
 
 
 
@@ -301,13 +343,14 @@ def plot_cf_convergence(results: dict, path_experiment: str, x_lim = None):
 
         ymax = max([results["time_" + method] for method in methods_non_ivi])
         ax.vlines(x=3 * results["mc_std_" + mode], ymin=0, ymax=ymax, color="k", linestyles="--", label="3 std")
-        if x_lim is not None:
-            ax.set_xlim(x_lim)
-        # ax.set_title(f"Simulation time, ${mode}_T$")
 
         ax.legend()
-        ax.set_xlabel(f"Absolute error, {mode}")
+        if is_log_time:
+            ax.set_yscale('log')
+        ax.set_xscale('log')
+        process_name = "$\Lambda_T$" if mode == "U" else "$N_T$"
+        ax.set_xlabel(f"Absolute error, " + process_name)
         ax.set_ylabel("Simulations time, s")
         ax.legend()
 
-    fig.savefig(path_experiment + "CF_convergence_2.pdf", format="pdf", bbox_inches="tight", transparent=True)
+    fig.savefig(path_experiment + "CF_convergence_exec_time.pdf", format="pdf", bbox_inches="tight", transparent=True)

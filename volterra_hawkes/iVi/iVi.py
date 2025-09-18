@@ -20,14 +20,13 @@ class IVIVolterra:
     g0: Callable = None
     g0_bar_res: Callable = None
 
-    def simulate_u_z(self, t_grid, n_paths, return_alpha: bool = False):
+    def simulate_u_z(self, t_grid, n_paths):
         n_steps = len(t_grid) - 1
         dt = t_grid[-1] / n_steps
-        resolvent = self.kernel.resolvent
 
         # Compute the matrix \bar K_ij
         if self.resolvent_flag:
-            ivi_kernel = resolvent
+            ivi_kernel = self.kernel.resolvent
             b_alpha = self.b - 1  # b = 0
             g0_bar_diff = np.diff(self.g0_bar_res(t_grid))
         else:
@@ -45,22 +44,14 @@ class IVIVolterra:
         if not markov_flag:
             int_matrix = int_kernel(t_grid[1:].reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
                          int_kernel(t_grid[:-1].reshape(-1, 1) - t_grid[:-1].reshape(1, -1))  # k_1
-            # int_matrix = int_kernel(t_grid[1:].reshape(-1, 1) - t_grid[1:].reshape(1, -1)) - \
-            #              int_kernel(t_grid[:-1].reshape(-1, 1) - t_grid[1:].reshape(1, -1))  # k_0
             int_matrix = np.tril(int_matrix, k=-1)
         else:
             mult_coef = np.exp(-ivi_kernel.lam * dt)
             k = (int_kernel(2*dt) - int_kernel(dt)) # k = k1
-            # or k = k0 = int_kernel(dt)
-            # or k = k_bar_bar = (double_int_kernel(2 * dt) - 2 * double_int_kernel(dt) + double_int_kernel(0)) / dt
 
-        # Need to stock the Z, U now because of non-markovianity
-        dZ, dU, d_alpha, d_xi = np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths))
-
-        # g0_bar_no_res_diff = np.diff(self.g0_bar(t_grid))
+        dZ, dU, d_xi = np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths))
 
         alpha_i = 0
-        dU_i = 0
         for i in range(n_steps):
             if not markov_flag:
                 alpha_i = g0_bar_diff[i] + self.c * int_matrix[i, :] @ dZ + b_alpha * int_matrix[i, :] @ d_xi
@@ -68,12 +59,10 @@ class IVIVolterra:
                 if i == 0:
                     alpha_i = g0_bar_diff[i]
                 else:
-                    # alpha_i = g0_bar_diff[i] + (dU_i - g0_bar_diff[i - 1]) * mult_coef
                     alpha_i = (g0_bar_diff[i] + (alpha_i - g0_bar_diff[i - 1]) * mult_coef +
                                (self.c * dZ[i - 1, :] + b_alpha * dU[i - 1, :]) * k)
             if np.any(alpha_i < 0):
                 scheme_name = "iVi" if not self.resolvent_flag else "iVi Res"
-                print(f"Achtung! Negative alpha encountered in {scheme_name} scheme. Setting to 0.")
                 warnings.warn(f"Negative alpha encountered in {scheme_name} scheme. Setting to 0.")
                 alpha_i = np.maximum(alpha_i, 1e-6)
 
@@ -91,29 +80,24 @@ class IVIVolterra:
 
             d_xi[i, :] = d_xi_i
             dZ[i, :] = dZ_i
-            d_alpha[i, :] = dU_i # alpha_i # TO CHANGE BACK TO alpha!
             dU[i, :] = dU_i
 
-        Z = np.vstack([np.zeros((1, n_paths)), np.cumsum(dZ, axis=0)])
-        U = np.vstack([np.zeros((1, n_paths)), np.cumsum(dU, axis=0)])
-        alpha = np.vstack([np.zeros((1, n_paths)), np.cumsum(d_alpha, axis=0)])
-
-        if return_alpha:
-            return U, Z, alpha
+        if self.is_continuous:
+            Z = np.vstack([np.zeros((1, n_paths)), np.cumsum(dZ, axis=0)])
         else:
-            return U, Z
+            Z = np.vstack([np.zeros((1, n_paths)), np.cumsum(dZ + d_xi - dU, axis=0)]) # = dN - dU
+        U = np.vstack([np.zeros((1, n_paths)), np.cumsum(dU, axis=0)])
 
-    def simulate_u_z_v(self, t_grid, n_paths, return_alpha: bool = False):
+        return U, Z
+
+    def simulate_u_z_v(self, t_grid, n_paths):
         if self.g0 is None:
             raise ValueError("g0 should be specified to simulate V.")
 
-        U, Z, alpha = self.simulate_u_z(t_grid=t_grid, n_paths=n_paths, return_alpha=True)
+        U, Z = self.simulate_u_z(t_grid=t_grid, n_paths=n_paths)
         dU, dZ = np.diff(U, axis=0), np.diff(Z, axis=0)
 
         K_mat = self.kernel(t_grid[:, None] - t_grid[None, :])
         K_mat = np.tril(K_mat, k=-1)
         V = self.g0(t_grid).reshape((-1, 1)) + self.c * K_mat[:, :-1] @ dZ + self.b * K_mat[:, :-1] @ dU
-        if return_alpha:
-            return U, Z, V, alpha
-        else:
-            return U, Z, V
+        return U, Z, V

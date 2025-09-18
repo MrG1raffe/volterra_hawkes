@@ -6,3 +6,4 @@ from .gamma_kernel import GammaKernel
 from .mittag_leffler_kernel import MittagLefflerKernel
 from .exp_mittag_leffler_kernel import  ExpMittagLefflerKernel
 from .sum_of_exponential_kernel import SumOfExponentialKernel
+from .shifted_kernel import ShiftedKernel

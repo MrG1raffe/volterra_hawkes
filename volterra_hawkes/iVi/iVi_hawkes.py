@@ -24,24 +24,14 @@ class IVIHawkesProcess:
         :param n_paths:
         :return: N, U, lambda as arrays of shape (len(t_grid), n_paths).
         """
-
-        ivi = IVIVolterra(is_continuous=False, resolvent_flag=self.resolvent_flag, kernel=self.kernel,
-                          g0_bar=self.g0_bar, g0_bar_res=self.g0_bar_res, rng=self.rng, b=1, c=1, g0=self.g0)
-        U, Z, lam, alpha = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths, return_alpha=True)
-        N = Z + U
-
-        # Calculating integrated intensity from N
-        #K_bar_mat = self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
-        #            self.kernel.integrated_kernel(t_grid.reshape(-1, 1) - t_grid[1:].reshape(1, -1))
-        #K_bar_mat = np.tril(K_bar_mat, k=-1)
-        #U_from_N = ivi.g0_bar(t_grid).reshape((-1, 1)) + (K_bar_mat @ N[:-1])
-        return N, alpha, lam
-
-    def simulate_arrivals(self, t_grid, n_paths):
         ivi = IVIVolterra(is_continuous=False, resolvent_flag=self.resolvent_flag, kernel=self.kernel,
                           g0_bar=self.g0_bar, g0_bar_res=self.g0_bar_res, rng=self.rng, b=1, c=1, g0=self.g0)
         U, Z, lam = ivi.simulate_u_z_v(t_grid=t_grid, n_paths=n_paths)
         N = Z + U
+        return N, U, lam
+
+    def simulate_arrivals(self, t_grid, n_paths):
+        N, U, lam = self.simulate_on_grid(t_grid=t_grid, n_paths=n_paths)
         dN = np.round(np.diff(N, axis=0)).astype(int)
 
         arrivals = []

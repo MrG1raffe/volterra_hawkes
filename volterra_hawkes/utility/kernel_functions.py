@@ -1,17 +1,22 @@
 import numpy as np
 from scipy.special import gamma, gammainc
 
+def gamma_capped(alpha):
+    if alpha > 0:
+        return gamma(alpha)
+    else:
+        return 1
 
 def fractional_kernel(t, alpha, c=1):
     t = np.array(t)
     valid_mask = t > 0  # Avoid issues with negative values
     result = np.zeros_like(t, dtype=np.float64)
-    result[valid_mask] = c * t[valid_mask ]**(alpha - 1) / gamma(alpha)
+    result[valid_mask] = c * t[valid_mask]**(alpha - 1) / gamma_capped(alpha)
     return result
 
 
 def inv_fractional_kernel(x, alpha, c=1):
-    return (x / c * gamma(alpha)) ** (1 / (alpha - 1))
+    return (x / c * gamma_capped(alpha)) ** (1 / (alpha - 1))
 
 
 def integrated_gamma_kernel(t, alpha, lam, c=1):
@@ -20,6 +25,7 @@ def integrated_gamma_kernel(t, alpha, lam, c=1):
 
 def double_integrated_gamma_kernel(t, alpha, lam, c = 1):
     return c / (lam ** (alpha + 1)) * (lam * t * gammainc(alpha, lam * t) - gammainc(alpha + 1, lam * t) * alpha)
+
 
 def mittag_leffler(t, alpha, beta, N=50):
     t = np.array(t)

@@ -18,20 +18,10 @@ def run_test0(e, path_experiment, experiment_results):
     plot_trajectories(e, path=path_experiment + "sample_trajectories.pdf")
 
 
-def run_test1(e, path_experiment, experiment_results):
-    # test 1: compute E[N_T]
-    rng = np.random.default_rng(seed=42)
-    ivi_hawkes = IVIHawkesProcess(kernel=e.kernel, g0_bar=e.g0_bar, rng=rng, g0=e.g0)
-    expected_U = ivi_hawkes.U_mean(t_grid=np.linspace(e.t_grid[0], e.t_grid[-1], 1000))
-    experiment_results["mean_N_T"] = expected_U[-1]
-    print("Mean:", experiment_results["mean_N_T"])
-
-
-def run_test2(e, path_experiment, experiment_results, samples_non_ivi):
+def run_test2(e, path_experiment, experiment_results, samples_non_ivi, n_steps_arr = (100,)):
     # test 2: marginal laws
     samples = {method: samples_non_ivi[method] for method in samples_non_ivi.keys()}
     print("Computing iVi samples...")
-    n_steps_arr = [10, 50, 100, 1000]
     ivi_methods = experiment_results["methods_ivi"]
     n_paths = 10_000
     for n_steps in n_steps_arr:
@@ -54,6 +44,7 @@ def run_test2(e, path_experiment, experiment_results, samples_non_ivi):
 def run_test3(e, path_experiment, experiment_results, samples_non_ivi):
     # test 3: convergence of the CF
     print("Computing iVi samples...")
+    is_log_time = experiment_results["is_log_time"]
     n_steps_arr = experiment_results["n_steps_arr_cf"]
     batch_size = experiment_results["batch_size_cf"]
     n_batch = experiment_results["n_batch_cf"]
@@ -61,16 +52,20 @@ def run_test3(e, path_experiment, experiment_results, samples_non_ivi):
     experiment_results["n_paths_ivi"] = n_batch * batch_size
     experiments = [e.change_n_steps(n_steps=n_steps) for n_steps in n_steps_arr]
 
+    rng = np.random.default_rng(seed=42)
+    ivi = IVIHawkesProcess(kernel=experiments[-1].kernel, g0_bar=experiments[-1].g0_bar, rng=rng,
+                           g0=experiments[-1].g0, resolvent_flag=False)
+    expected_U = ivi.U_mean(t_grid=np.linspace(e.t_grid[0], e.t_grid[-1], 1000))
+    experiment_results["mean_N_T"] = expected_U[-1]
+    print("Mean:", experiment_results["mean_N_T"])
+
     w = -1 / experiment_results["mean_N_T"]
     fun = lambda x: np.exp(w * x)
     cf_ref = {}
+
     for mode in ["U", "N"]:
         idx = 1 if mode == "U" else 0
         experiment_results["mc_std_" + mode] = fun(samples_non_ivi[experiment_results["methods_non_ivi"][0]][idx][:, -1]).std() / np.sqrt(experiment_results["n_paths_ivi"])
-
-        rng = np.random.default_rng(seed=42)
-        ivi = IVIHawkesProcess(kernel=experiments[-1].kernel, g0_bar=experiments[-1].g0_bar, rng=rng,
-                               g0=experiments[-1].g0, resolvent_flag=False)
         cf_ref[mode] = ivi.characteristic_function(T=experiments[-1].T, w=w, n_steps=10000, mode=mode)
 
 
@@ -100,7 +95,7 @@ def run_test3(e, path_experiment, experiment_results, samples_non_ivi):
     for mode in ["U", "N"]:
         for method in experiment_results["methods_ivi"]:
             experiment_results["mc_std_" + method + "_" + mode] = np.sqrt(mc_samples[(method, experiments[-1].n_steps, mode)].var / experiment_results["n_paths_ivi"])
-    plot_cf_convergence(results=experiment_results, path_experiment=path_experiment)
+    plot_cf_convergence(results=experiment_results, path_experiment=path_experiment, is_log_time=is_log_time)
 
 
 def run_test4(e, path_experiment, experiment_results):
