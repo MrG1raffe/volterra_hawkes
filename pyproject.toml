@@ -17,5 +17,9 @@ dependencies = [
 ]
 readme = "README.md"
 
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["notebooks*", "docs*"]
+
 [project.urls]
 Homepage = "https://github.com/MrG1raffe/volterra_hawkes"

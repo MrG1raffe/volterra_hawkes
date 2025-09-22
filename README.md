@@ -21,9 +21,9 @@ Exact and approximate methods for simulating standard and exponential Hawkes pro
 
 ## Installation
 ```
-git clone <repo-url>
+git clone https://github.com/MrG1raffe/volterra_hawkes
 cd <repo-folder>
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Usage
@@ -69,13 +69,14 @@ S, U, Z, V = model.simulate_price(t_grid=t_grid, n_paths=n_paths)
 
 ### Hawkes Process Simulation
 ```
+import numpy as np
 from volterra_hawkes.iVi.iVi_hawkes import IVIHawkesProcess
 from volterra_hawkes.kernel.kernels import ExponentialKernel
 
 kernel = ExponentialKernel(c=0.1, lam=0.5)
-hawkes = IVIHawkesProcess(kernel=kernel, g0_bar=lambda t: 0.02, rng=np.random.default_rng(42))
+hawkes = IVIHawkesProcess(kernel=kernel, g0_bar=lambda t: 2 * t, g0=lambda t: 2 * np.ones_like(t), rng=np.random.default_rng(42))
 
-t_grid = np.linspace(0, 1, 100)
+t_grid = np.linspace(0, 10, 100)
 N, U, lam = hawkes.simulate_on_grid(t_grid, n_paths=10)
 arrivals = hawkes.simulate_arrivals(t_grid, n_paths=10)
 ```
