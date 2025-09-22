@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "volterra-hawkes"
+version = "1.0"
+description = "Volterra process simulation and solvers for Volterra equations"
+authors = [
+    { name = "MrG1raffe", email = "dimitri.sotnikov@gmail.com" }
+]
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "scipy",
+    "statsmodels"
+]
+readme = "README.md"
+
+[project.urls]
+Homepage = "https://github.com/MrG1raffe/volterra_hawkes"
