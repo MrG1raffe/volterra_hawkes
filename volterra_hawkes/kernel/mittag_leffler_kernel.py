@@ -8,6 +8,23 @@ from ..utility.kernel_functions import mittag_leffler
 
 @dataclass
 class MittagLefflerKernel(Kernel):
+    """
+    Mittag-Leffler kernel function for Volterra processes.
+
+    The kernel combines a power-law with the generalized Mittag-Leffler function:
+
+        K(t) = c * t^(α - 1) * E_{α, α}(c * t^α)
+
+    where `E_{α, β}` is the generalized Mittag-Leffler function, `c` is a
+    scaling constant, and `α` controls the memory and persistence of the kernel.
+
+    Attributes
+    ----------
+    c : float
+        Scaling constant of the kernel.
+    alpha : float
+        Memory parameter α controlling the power-law behavior and persistence.
+    """
     c: float
     alpha: float
 

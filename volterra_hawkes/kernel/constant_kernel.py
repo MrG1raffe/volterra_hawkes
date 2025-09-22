@@ -8,7 +8,18 @@ from .exponential_kernel import ExponentialKernel
 @dataclass
 class ConstantKernel(Kernel):
     """
-    Constant kernel K(t) = c.
+    Constant kernel function for Volterra processes.
+
+    The kernel is constant over time:
+
+        K(t) = c
+
+    where `c` is a fixed scalar.
+
+    Attributes
+    ----------
+    c : float
+        Constant value of the kernel (default is 1).
     """
     c: float = 1
 

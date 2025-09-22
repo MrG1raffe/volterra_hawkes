@@ -10,6 +10,61 @@ from ..kernel.exponential_kernel import ExponentialKernel
 
 @dataclass
 class IVIVolterra:
+    """
+    Simulator for the (iVi) and (iVi Res) Volterra schemes.
+
+    This class implements simulation methods for interacting
+    Volterra-type processes, with support for both the standard
+    kernel formulation and its resolvent version. It can produce
+    trajectories of the auxiliary processes (U, Z), and optionally
+    the instantaneous variance process (V).
+
+    Integrated variance dynamics
+    ---------------------------
+    The process :math:`U_t` follows the Volterra-type stochastic integral equation:
+
+    .. math::
+
+        U_t = \int_0^t g_0(s)\,ds + \int_0^t K(t-s) ( b\,U_s + c\,Z_s)\,ds,
+
+    where :math:`K` is the kernel function, :math:`g_0(t)` is the input function,
+    and :math:`Z_t` is a subordinated auxiliary process.
+
+
+    Attributes
+    ----------
+    is_continuous : bool
+        If True, simulates the continuous version of the scheme.
+        If False, uses the jump–Hawkes version.
+    resolvent_flag : bool
+        If True, uses the resolvent kernel and `g0_bar_res` for the scheme.
+        Otherwise, uses the standard kernel and `g0_bar`.
+    kernel : Kernel
+        The kernel function K(t), must implement `__call__` and
+        `integrated_kernel`.
+    g0_bar : Callable
+        Function ḡ₀(t) defining the integrated input function.
+        Required if `resolvent_flag` is False.
+    rng : numpy.random.Generator
+        Random number generator used for sampling (Poisson/Wald).
+    b : float
+        Coefficient `b` in the scheme. Common choices: 0 (resolvent case),
+        or 1 (standard case).
+    c : float
+        Coefficient `c` in the scheme.
+    g0_bar_res : Callable, optional
+        Function ḡ₀ʳ(t), required if `resolvent_flag` is True.
+    g0 : Callable, optional
+        Function g₀(t), used when simulating the instantaneous
+        variance process V.
+
+    Notes
+    -----
+    - If `resolvent_flag` is set, then `g0_bar_res` must be provided.
+    - If `resolvent_flag` is False, then `g0_bar` must be provided.
+    - The scheme uses warnings to notify when negative `alpha` values
+      are encountered in the iVi Res (these are clipped to a small positive number).
+    """
     is_continuous: bool
     resolvent_flag: bool
     kernel: Kernel
@@ -17,10 +72,40 @@ class IVIVolterra:
     rng: np.random.Generator
     b: float
     c: float
-    g0: Callable = None
-    g0_bar_res: Callable = None
+    g0_bar_res: Callable = None  # Optional; should be specified to use the resolvent version of the scheme
+    g0: Callable = None          # Optional; should be specified if one wants to simulate the instantaneous variance process
+
 
     def simulate_u_z(self, t_grid, n_paths):
+        """
+        Simulate the auxiliary processes U and Z.
+
+        Parameters
+        ----------
+        t_grid : array_like of shape (n_steps + 1,)
+            Increasing time grid for the simulation.
+        n_paths : int
+            Number of independent sample paths to simulate.
+
+        Returns
+        -------
+        U : ndarray of shape (n_steps + 1, n_paths)
+            Simulated process U(t).
+        Z : ndarray of shape (n_steps + 1, n_paths)
+            Simulated process Z(t).
+
+        Raises
+        ------
+        ValueError
+            If the stability condition `(1 - b * K̄(dt)) < 0` is violated,
+            which typically indicates that the time step is too large.
+
+        Warns
+        -----
+        UserWarning
+            If negative `alpha` values are encountered during simulation,
+            they are clipped to small positive values.
+        """
         n_steps = len(t_grid) - 1
         dt = t_grid[-1] / n_steps
 
@@ -91,13 +176,39 @@ class IVIVolterra:
         return U, Z
 
     def simulate_u_z_v(self, t_grid, n_paths):
-        if self.g0 is None:
-            raise ValueError("g0 should be specified to simulate V.")
+        """
+        Simulate the processes U, Z, and optionally V.
 
+        This method extends `simulate_u_z` by also computing the
+        instantaneous variance process V, if the function `g0`
+        was provided at initialization.
+
+        Parameters
+        ----------
+        t_grid : array_like of shape (n_steps + 1,)
+            Increasing time grid for the simulation.
+        n_paths : int
+            Number of independent sample paths to simulate.
+
+        Returns
+        -------
+        U : ndarray of shape (n_steps + 1, n_paths)
+            Simulated process U(t).
+        Z : ndarray of shape (n_steps + 1, n_paths)
+            Simulated process Z(t).
+        V : ndarray of shape (n_steps + 1, n_paths)
+            Instantaneous variance process V(t).
+            If `g0` is not specified, returns an array filled with NaN.
+        """
         U, Z = self.simulate_u_z(t_grid=t_grid, n_paths=n_paths)
         dU, dZ = np.diff(U, axis=0), np.diff(Z, axis=0)
 
         K_mat = self.kernel(t_grid[:, None] - t_grid[None, :])
         K_mat = np.tril(K_mat, k=-1)
-        V = self.g0(t_grid).reshape((-1, 1)) + self.c * K_mat[:, :-1] @ dZ + self.b * K_mat[:, :-1] @ dU
+
+        if self.g0 is None:
+            V = np.zeros_like(Z) * np.nan
+        else:
+            V = self.g0(t_grid).reshape((-1, 1)) + self.c * K_mat[:, :-1] @ dZ + self.b * K_mat[:, :-1] @ dU
+
         return U, Z, V

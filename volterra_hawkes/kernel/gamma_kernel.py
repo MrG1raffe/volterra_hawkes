@@ -10,7 +10,23 @@ from ..utility.kernel_functions import fractional_kernel, integrated_gamma_kerne
 @dataclass
 class GammaKernel(Kernel):
     """
-    Gamma kernel K(t) = c * e**(-lam * x) * t**(alpha - 1) / Γ(alpha).
+    Gamma kernel function for Volterra processes.
+
+    The kernel combines a power-law and exponential decay:
+
+        K(t) = c * t^(α - 1) * exp(-λ * t) / Γ(α)
+
+    where `c` is a scaling constant, `α` is the shape parameter,
+    and `λ` is the decay rate.
+
+    Attributes
+    ----------
+    alpha : float
+        Shape parameter α of the gamma kernel.
+    lam : float
+        Exponential decay rate λ.
+    c : float, default=1
+        Scaling constant of the kernel.
     """
     alpha: float
     lam: float

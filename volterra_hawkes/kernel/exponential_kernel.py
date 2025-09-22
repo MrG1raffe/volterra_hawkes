@@ -7,7 +7,20 @@ from .kernel import Kernel
 @dataclass
 class ExponentialKernel(Kernel):
     """
-    Exponential kernel K(t) = c * exp(-lam * t).
+    Exponential kernel function for Volterra processes.
+
+    The kernel decays exponentially over time:
+
+        K(t) = c * exp(-λ * t)
+
+    where `c` is a scaling constant and `λ` controls the decay rate.
+
+    Attributes
+    ----------
+    c : float, default=1
+        Scaling constant of the kernel.
+    lam : float, default=1
+        Decay rate λ of the exponential kernel.
     """
     c: float = 1
     lam: float = 1

@@ -3,6 +3,24 @@ from .kernel import Kernel
 
 @dataclass
 class ShiftedKernel(Kernel):
+    """
+    Shifted kernel function for Volterra processes.
+
+    This kernel applies a time shift to an existing kernel:
+
+        K_shifted(t) = K(t + ε)
+
+    where `K` is the base kernel and `ε` is a positive shift parameter.
+    The integrated and double integrated kernels are adjusted to account
+    for the shift.
+
+    Attributes
+    ----------
+    eps : float
+        Horizontal shift applied to the base kernel.
+    kernel : Kernel
+        Base kernel instance that is being shifted.
+    """
     eps: float
     kernel: Kernel
 

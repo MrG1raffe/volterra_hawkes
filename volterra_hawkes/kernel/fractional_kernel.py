@@ -10,7 +10,21 @@ from ..utility.kernel_functions import inv_fractional_kernel, fractional_kernel
 @dataclass
 class FractionalKernel(Kernel):
     """
-    Fractional kernel K(t) = c * t**(H - 0.5) / Γ(H + 0.5).
+    Fractional kernel function for Volterra processes.
+
+    The kernel exhibits power-law memory:
+
+        K(t) = c * t^(H - 0.5) / Γ(H + 0.5)
+
+    where `c` is a scaling constant and `H` is the Hurst parameter
+    controlling the roughness or persistence of the process.
+
+    Attributes
+    ----------
+    c : float, default=1
+        Scaling constant of the kernel.
+    H : float, default=0.1
+        Hurst parameter controlling the roughness/memory of the kernel.
     """
     c: float = 1
     H: float = 0.1

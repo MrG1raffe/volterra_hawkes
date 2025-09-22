@@ -12,7 +12,20 @@ from .kernel import Kernel
 @dataclass
 class SumOfExponentialKernel(Kernel):
     """
-    Exponential kernel K(t) = sum_i c_i * exp(-lam_i * t).
+    Sum-of-exponentials kernel function for Volterra processes.
+
+    The kernel is defined as a linear combination of exponential kernels:
+
+        K(t) = Σ_i c_i * exp(-λ_i * t)
+
+    where `c_i` are scaling constants and `λ_i` are decay rates.
+
+    Attributes
+    ----------
+    c : np.ndarray
+        Array of scaling constants for each exponential factor.
+    lam : np.ndarray
+        Array of decay rates for each exponential factor.
     """
     c: np.ndarray = np.ones(1)
     lam: np.ndarray = np.zeros(1)
