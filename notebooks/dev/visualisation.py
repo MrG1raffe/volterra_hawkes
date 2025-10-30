@@ -60,7 +60,10 @@ def plot_marginal_laws(results, samples, flag, path=None):
 
     X_T_exact = samples[exact_method][idx][:, -1]
     x_grid = np.linspace(0, np.max(X_T_exact), 500)
-    bins = np.arange(np.floor(np.max(X_T_exact)))
+    if flag == "N":
+        bins = np.arange(np.floor(np.max(X_T_exact)))
+    else:
+        bins = x_grid[::10]
 
     ecdf_exact = sm.distributions.ECDF(samples[exact_method][idx][:, -1])
     ax[0, 0].hist(samples[exact_method][idx][:, -1], density=True, bins=bins, alpha=0.3, color="k", label=methods[0])

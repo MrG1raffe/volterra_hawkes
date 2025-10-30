@@ -33,11 +33,14 @@ class ExpMittagLefflerKernel(Kernel):
         Memory parameter α of the Mittag-Leffler function.
     N_mittag_leffler : int, default=25
         Number of terms used to approximate the Mittag-Leffler series.
+    c_0 : float
+        Multiplicative constant of the kernel.
     """
     c: float
     lam: float
     alpha: float
     N_mittag_leffler: int = 25
+    c_0: float = 1
 
     def __call__(self, t):
         valid_mask = t > 0  # Avoid issues with negative values
@@ -45,17 +48,20 @@ class ExpMittagLefflerKernel(Kernel):
         result[valid_mask] = self.c * np.exp(-self.lam * t[valid_mask]) * t[valid_mask] ** (self.alpha - 1) * \
                              mittag_leffler(t=self.c * t[valid_mask] ** self.alpha, alpha=self.alpha, beta=self.alpha,
                                             N=self.N_mittag_leffler)
-        return result
+        return self.c_0 * result
 
     def integrated_kernel(self, t):
-        return integrated_exp_mittag_leffler_kernel(t=t, alpha=self.alpha, lam=self.lam, c=self.c, N=self.N_mittag_leffler)
+        return self.c_0 * integrated_exp_mittag_leffler_kernel(t=t, alpha=self.alpha, lam=self.lam, c=self.c, N=self.N_mittag_leffler)
 
     def double_integrated_kernel(self, t):
-        return double_integrated_exp_mittag_leffler_kernel(t=t, alpha=self.alpha, lam=self.lam, c=self.c, N=self.N_mittag_leffler)
+        return self.c_0 * double_integrated_exp_mittag_leffler_kernel(t=t, alpha=self.alpha, lam=self.lam, c=self.c, N=self.N_mittag_leffler)
 
     @property
     def resolvent(self) -> Kernel:
-        raise NotImplementedError()
+        if np.isclose(self.c_0, 1):
+            return ExpMittagLefflerKernel(c=2 * self.c, lam=self.lam, alpha=self.alpha, c_0=0.5)
+        else:
+            raise NotImplementedError
 
     def inv_kernel(self, x):
         raise NotImplementedError
