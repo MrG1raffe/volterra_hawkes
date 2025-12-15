@@ -3,7 +3,9 @@ import warnings
 import numpy as np
 from typing import Callable
 from dataclasses import dataclass
+from copy import deepcopy
 
+from ..kernel.constant_kernel import ConstantKernel
 from ..kernel.kernel import Kernel
 from ..kernel.exponential_kernel import ExponentialKernel
 
@@ -28,7 +30,7 @@ class IVIVolterra:
         U_t = \int_0^t g_0(s)\,ds + \int_0^t K(t-s) ( b\,U_s + c\,Z_s)\,ds,
 
     where :math:`K` is the kernel function, :math:`g_0(t)` is the input function,
-    and :math:`Z_t` is a subordinated auxiliary process.
+    and :math:`Z_t` is a martingale auxiliary process.
 
 
     Attributes
@@ -53,7 +55,7 @@ class IVIVolterra:
     c : float
         Coefficient `c` in the scheme.
     g0_bar_res : Callable, optional
-        Function ḡ₀ʳ(t), required if `resolvent_flag` is True.
+        Function ḡ₀ʳ(t) = ḡ₀ + R ★ ḡ₀, where R is the resolvent of bK, required if `resolvent_flag` is True.
     g0 : Callable, optional
         Function g₀(t), used when simulating the instantaneous
         variance process V.
@@ -78,7 +80,7 @@ class IVIVolterra:
 
     def simulate_u_z(self, t_grid, n_paths):
         """
-        Simulate the auxiliary processes U and Z.
+        Simulate the processes U and Z.
 
         Parameters
         ----------
@@ -111,57 +113,68 @@ class IVIVolterra:
 
         # Compute the matrix \bar K_ij
         if self.resolvent_flag:
-            ivi_kernel = self.kernel.resolvent
-            b_alpha = self.b - 1  # b = 0
+            b_kernel = deepcopy(self.kernel)
+            b_kernel.c = self.kernel.c * self.b
+            ivi_kernel = b_kernel.resolvent  # resolvent of the kernel bK
+            b_scheme = 0
+            c_scheme = self.c / self.b
             g0_bar_diff = np.diff(self.g0_bar_res(t_grid))
         else:
             ivi_kernel = self.kernel
-            b_alpha = self.b  # b = 1
+            b_scheme = self.b
+            c_scheme = self.c
             g0_bar_diff = np.diff(self.g0_bar(t_grid))
 
         int_kernel = ivi_kernel.integrated_kernel
         int_ker_dt = int_kernel(dt)
-        if (1 - b_alpha * int_ker_dt) < 0:
+        if (1 - b_scheme * int_ker_dt) < 0:
             raise ValueError("The denominator (1 - b * K_bar) cannot be negative. Reduce the discretization step.")
 
-        markov_flag = isinstance(ivi_kernel, ExponentialKernel)
+        if isinstance(ivi_kernel, ConstantKernel) or isinstance(ivi_kernel, ExponentialKernel):
+            # Markovian update of alpha.
+            if isinstance(ivi_kernel, ConstantKernel):
+                mult_coef = 1
+            else:
+                mult_coef = np.exp(-ivi_kernel.lam * dt)
+            k = (int_kernel(2 * dt) - int_kernel(dt))  # k = k1
 
-        if not markov_flag:
+            def update_alpha(alpha_prev, g0_bar_diff, dZ, dU, d_xi):
+                if i == 0:
+                    alpha_i = g0_bar_diff[i]
+                else:
+                    alpha_i = (g0_bar_diff[i] + (alpha_prev - g0_bar_diff[i - 1]) * mult_coef +
+                               (c_scheme * dZ[i - 1, :] + b_scheme * dU[i - 1, :]) * k)
+                return alpha_i
+        else:
+            # General non-Markovian update
             int_matrix = int_kernel(t_grid[1:].reshape(-1, 1) - t_grid[:-1].reshape(1, -1)) - \
                          int_kernel(t_grid[:-1].reshape(-1, 1) - t_grid[:-1].reshape(1, -1))  # k_1
             int_matrix = np.tril(int_matrix, k=-1)
-        else:
-            mult_coef = np.exp(-ivi_kernel.lam * dt)
-            k = (int_kernel(2*dt) - int_kernel(dt)) # k = k1
+
+            def update_alpha(alpha_prev, g0_bar_diff, dZ, dU, d_xi):
+                return g0_bar_diff[i] + c_scheme * int_matrix[i, :] @ dZ + b_scheme * int_matrix[i, :] @ d_xi
 
         dZ, dU, d_xi = np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths)), np.zeros((n_steps, n_paths))
 
         alpha_i = 0
         for i in range(n_steps):
-            if not markov_flag:
-                alpha_i = g0_bar_diff[i] + self.c * int_matrix[i, :] @ dZ + b_alpha * int_matrix[i, :] @ d_xi
-            else:
-                if i == 0:
-                    alpha_i = g0_bar_diff[i]
-                else:
-                    alpha_i = (g0_bar_diff[i] + (alpha_i - g0_bar_diff[i - 1]) * mult_coef +
-                               (self.c * dZ[i - 1, :] + b_alpha * dU[i - 1, :]) * k)
+            alpha_i = update_alpha(alpha_i, g0_bar_diff, dZ, dU, d_xi)
             if np.any(alpha_i < 0):
                 scheme_name = "iVi" if not self.resolvent_flag else "iVi Res"
                 warnings.warn(f"Negative alpha encountered in {scheme_name} scheme. Setting to 0.")
                 alpha_i = np.maximum(alpha_i, 1e-6)
 
-            mu = alpha_i / (1 - b_alpha * int_ker_dt)
-            lambda_ = (alpha_i / (self.c * int_ker_dt))**2
+            mu = alpha_i / (1 - b_scheme * int_ker_dt)
+            lambda_ = (alpha_i / (c_scheme * int_ker_dt))**2
             d_xi_i = self.rng.wald(mean=mu, scale=lambda_, size=n_paths)
 
             if self.is_continuous:
                 dU_i = d_xi_i
-                dZ_i = ((1 - b_alpha * int_ker_dt) * dU_i - alpha_i) / (self.c * int_ker_dt)
+                dZ_i = ((1 - b_scheme * int_ker_dt) * dU_i - alpha_i) / (c_scheme * int_ker_dt)
             else:
                 dN_i = self.rng.poisson(lam=d_xi_i, size=n_paths)
                 dZ_i = dN_i - d_xi_i
-                dU_i = (alpha_i + int_ker_dt * self.c * dN_i) / (1 + int_ker_dt * (self.c - b_alpha))
+                dU_i = (alpha_i + int_ker_dt * c_scheme * dN_i) / (1 + int_ker_dt * (c_scheme - b_scheme))
 
             d_xi[i, :] = d_xi_i
             dZ[i, :] = dZ_i
@@ -177,7 +190,7 @@ class IVIVolterra:
 
     def simulate_u_z_v(self, t_grid, n_paths):
         """
-        Simulate the processes U, Z, and optionally V.
+        Simulate the processes U, Z, and V.
 
         This method extends `simulate_u_z` by also computing the
         instantaneous variance process V, if the function `g0`

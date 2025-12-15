@@ -24,11 +24,10 @@ class IVIHawkesProcess:
 
       .. math::
 
-          U_t = \int_0^t g_0(s)\,ds
-                + \int_0^t K(t-s) (\,U_s + \,Z_s )\,ds,
+          U_t = \int_0^t g_0(s)\,ds + \int_0^t K(t-s) (\,U_s + \,Z_s )\,ds,
 
       where :math:`K` is the kernel function, :math:`g_0(t)` is the input function,
-      and :math:`Z_t = N_t - U_t` is a subordinated auxiliary process. This defines the cumulative
+      and :math:`Z_t = N_t - U_t` is a Martingale auxiliary process. This defines the cumulative
       contribution of past events and the memory effect in the Hawkes process.
 
 

@@ -18,11 +18,10 @@ class IVIVolterraVolModel(IVIVolterra):
 
     .. math::
 
-        U_{t} = \int_0^t g_0(s)\,ds
-                  + \int_0^t K(t-s) \big( b\,U_{s} + c\,Z_{s} \big)\,ds, \\
+        U_{t} = \int_0^t g_0(s)\,ds + \int_0^t K(t-s) \big( b\,U_{s} + c\,Z_{s} \big)\,ds, \\
 
     where :math:`K` is the Volterra kernel, :math:`g_0` is the input function
-    defining the initial variance curve, and :math:`Z` is the subordinated process.
+    defining the initial variance curve, and :math:`Z` is the martingale process.
 
     The stock price :math:`S_t` follows martingale dynamics driven by a Brownian motion :math:`B_{t}` correlated with
     :math:`Z_t` and :math:`U_{t}` as integrated variance.
@@ -42,7 +41,7 @@ class IVIVolterraVolModel(IVIVolterra):
         The method generates Monte Carlo paths for:
         - The stock price `S`
         - The integrated variance `U`
-        - The subordinated process `Z`
+        - The martingale process `Z`
         - The instantaneous variance `V`
 
         The dynamics of the log-price include a correlation term `rho` that
@@ -64,7 +63,7 @@ class IVIVolterraVolModel(IVIVolterra):
         U : ndarray
             Integrated variance process of shape (len(t_grid), n_paths).
         Z : ndarray
-            Subordinated process of shape (len(t_grid), n_paths).
+            Martingale process of shape (len(t_grid), n_paths).
         V : ndarray
             Instantaneous variance of shape (len(t_grid), n_paths).
         """

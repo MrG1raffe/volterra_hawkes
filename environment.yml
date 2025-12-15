@@ -7,8 +7,6 @@ dependencies:
   - openssl=3.0.15
   - python=3.9
   - sqlite=3.45.3
-  - vc=14.40
-  - vs2015_runtime=14.42.34433
   - pip
   - pip:
     - asttokens==3.0.0
@@ -50,7 +48,6 @@ dependencies:
     - pyparsing==3.1.4
     - python-dateutil==2.9.0.post0
     - pytz==2025.1
-    - pywin32==308
     - pyzmq==26.2.0
     - scipy==1.10.1
     - setuptools==75.3.0
